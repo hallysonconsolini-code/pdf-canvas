@@ -63,3 +63,13 @@ export function intersect(a: Rect, b: Rect): Rect | null {
   const bt = Math.min(a.y + a.h, b.y + b.h);
   return r > x && bt > y ? { x, y, w: r - x, h: bt - y } : null;
 }
+
+/** Page containing the centre of a rectangle, or null (scratch area). */
+export function pageForRect(pages: PageBox[], r: Rect): number | null {
+  const cx = r.x + r.w / 2;
+  const cy = r.y + r.h / 2;
+  const i = pageAtY(pages, cy);
+  const p = pages[i];
+  if (!p) return null;
+  return cx >= p.x && cx <= p.x + p.w && cy >= p.y && cy <= p.y + p.h ? i : null;
+}
