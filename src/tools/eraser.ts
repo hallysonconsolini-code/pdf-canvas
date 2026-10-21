@@ -26,7 +26,7 @@ export const eraserTool: Tool = {
         }
       }
       prev = p;
-      if (changed) ctx.renderer.setHidden(erased.keys());
+      if (changed) ctx.renderer.setPreview([], erased.keys());
     };
 
     touch(start);
@@ -35,11 +35,11 @@ export const eraserTool: Tool = {
         for (const p of points) touch(p);
       },
       end() {
-        ctx.renderer.setHidden([]);
         ctx.store.remove([...erased.values()]);
+        ctx.renderer.setPreview([]);
       },
       cancel() {
-        ctx.renderer.setHidden([]);
+        ctx.renderer.setPreview([]);
       },
     };
   },

@@ -1,4 +1,3 @@
-import type { WetStroke } from "../canvas/annotationRenderer";
 import { strokeBBox, strokeSize } from "../canvas/strokes";
 import { newId } from "../model/document";
 import type { StrokeAnnotation } from "../model/types";
@@ -11,7 +10,17 @@ export function freehandTool(type: "pen" | "highlighter"): Tool {
     begin(ctx: ToolContext, start: ToolPoint): ToolGesture {
       const { color, width } = ctx.prefs(type);
       const points: number[] = [round(start.x), round(start.y), round(start.pressure)];
-      const stroke: WetStroke = { type, color, width, points };
+      // Live copy shown on the wet layer while drawing.
+      const stroke: StrokeAnnotation = {
+        id: "wet",
+        createdAt: 0,
+        page: null,
+        bbox: { x: 0, y: 0, w: 0, h: 0 },
+        type,
+        color,
+        width,
+        points,
+      };
       let straight = false;
       // Ignore jitter smaller than a quarter of a screen pixel.
       const minStep = () => 0.25 / ctx.camera.zoom;
