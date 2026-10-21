@@ -31,7 +31,7 @@ const FIT_PADDING = 48;
 
 export function Viewport({ doc, panMode, onStatus, ref }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
-  const worldRef = useRef<HTMLDivElement>(null);
+  const pagesRef = useRef<HTMLDivElement>(null);
   const cameraRef = useRef<Camera | null>(null);
   const panModeRef = useRef(panMode);
   const onStatusRef = useRef(onStatus);
@@ -68,7 +68,7 @@ export function Viewport({ doc, panMode, onStatus, ref }: Props) {
 
   useEffect(() => {
     const root = rootRef.current!;
-    const world = worldRef.current!;
+    const pagesLayer = pagesRef.current!;
     const camera = new Camera();
     cameraRef.current = camera;
     const b = doc.layout.bounds;
@@ -76,7 +76,7 @@ export function Viewport({ doc, panMode, onStatus, ref }: Props) {
     // Free space around the pages for scratch notes.
     camera.bounds = { x: b.x - spare, y: b.y - spare / 2, w: b.w + spare * 2, h: b.h + spare };
 
-    const renderer = new PageRenderer(doc, camera, world);
+    const renderer = new PageRenderer(doc, camera, pagesLayer);
     let frame = 0;
     let zoomChanged = false;
     let lastPage = -1;
@@ -84,7 +84,6 @@ export function Viewport({ doc, panMode, onStatus, ref }: Props) {
 
     const draw = () => {
       frame = 0;
-      world.style.transform = `translate3d(${-camera.x * camera.zoom}px, ${-camera.y * camera.zoom}px, 0) scale(${camera.zoom})`;
       renderer.update(zoomChanged);
       zoomChanged = false;
       const page = pageAtY(doc.layout.pages, camera.y + camera.height / camera.zoom / 3);
@@ -151,7 +150,7 @@ export function Viewport({ doc, panMode, onStatus, ref }: Props) {
 
   return (
     <div ref={rootRef} className={`viewport${panMode ? " tool-pan" : " tool-select"}`}>
-      <div ref={worldRef} className="world" />
+      <div ref={pagesRef} className="pages-layer" />
     </div>
   );
 }

@@ -14,14 +14,24 @@ const KEEP_PAGES = 2;
 const MAX_CONCURRENT_RENDERS = 2;
 /** Wait for zoom/pan to stop before re-rendering sharper bitmaps. */
 const SETTLE_MS = 150;
+/** Scale difference tolerated before re-rendering (1%). */
+const SCALE_TOLERANCE = 0.01;
+
+/** A bitmap of a page region rendered at a given scale. */
+interface Bitmap {
+  canvas: HTMLCanvasElement;
+  scale: number;
+  /** Page-local region in world units (whole page for the base bitmap). */
+  rect: Rect;
+}
 
 interface Slot {
   box: PageBox;
   el: HTMLDivElement;
-  base: HTMLCanvasElement | null;
-  baseScale: number;
+  textBox: HTMLDivElement;
+  base: Bitmap | null;
   baseJob: { scale: number; task: RenderTask } | null;
-  detail: HTMLCanvasElement | null;
+  detail: Bitmap | null;
   detailKey: string;
   detailJob: { key: string; task: RenderTask } | null;
   text: TextLayer | null;
@@ -31,14 +41,18 @@ interface Job {
   slot: Slot;
   kind: "base" | "detail";
   scale: number;
-  rect: Rect | null;
+  rect: Rect;
   key: string;
   priority: number;
 }
 
 /**
- * Keeps DOM nodes and bitmaps only for pages near the view, renders them at
- * the screen's real resolution once the camera settles, and frees the rest.
+ * Keeps DOM nodes and bitmaps only for pages near the view and renders them
+ * at the screen's exact pixel density once the camera settles.
+ *
+ * Pages are positioned in screen pixels (no CSS scale on an ancestor), and
+ * every bitmap is shown at canvas.width / devicePixelRatio CSS pixels, so a
+ * settled page maps 1:1 to physical pixels and stays as sharp as vector text.
  */
 export class PageRenderer {
   private slots = new Map<number, Slot>();
@@ -51,7 +65,7 @@ export class PageRenderer {
   constructor(
     private doc: PdfDocument,
     private camera: Camera,
-    private world: HTMLElement,
+    private host: HTMLElement,
   ) {}
 
   /** Call after every camera change (once per frame). */
@@ -60,6 +74,7 @@ export class PageRenderer {
     this.lastMove = now;
     if (zoomChanged) this.lastZoomChange = now;
     this.syncSlots();
+    for (const slot of this.slots.values()) this.position(slot);
     this.pump();
     window.clearTimeout(this.settleTimer);
     this.settleTimer = window.setTimeout(() => this.pump(), SETTLE_MS + 10);
@@ -68,16 +83,34 @@ export class PageRenderer {
   /** Re-render everything (e.g. after moving to a screen with another DPI). */
   invalidate(): void {
     for (const slot of this.slots.values()) {
-      slot.baseScale = 0;
+      if (slot.base) slot.base.scale = 0;
       slot.detailKey = "";
     }
-    this.pump();
+    this.update(true);
   }
 
   destroy(): void {
     this.destroyed = true;
     window.clearTimeout(this.settleTimer);
     for (const index of [...this.slots.keys()]) this.unmount(index);
+  }
+
+  // ---- placement -------------------------------------------------------
+
+  /** Places a page and its bitmaps in screen pixels, snapped to device pixels. */
+  private position(slot: Slot): void {
+    const { zoom } = this.camera;
+    const dpr = window.devicePixelRatio || 1;
+    const { box, el } = slot;
+    const left = snap((box.x - this.camera.x) * zoom, dpr);
+    const top = snap((box.y - this.camera.y) * zoom, dpr);
+    el.style.transform = `translate(${left}px, ${top}px)`;
+    el.style.width = `${box.w * zoom}px`;
+    el.style.height = `${box.h * zoom}px`;
+    // The text layer is transparent, so scaling it with CSS is fine.
+    slot.textBox.style.transform = `scale(${zoom})`;
+    if (slot.base) placeBitmap(slot.base, zoom);
+    if (slot.detail) placeBitmap(slot.detail, zoom);
   }
 
   // ---- slot management -------------------------------------------------
@@ -108,17 +141,18 @@ export class PageRenderer {
     const box = this.doc.layout.pages[index];
     const el = document.createElement("div");
     el.className = "page";
-    el.style.left = `${box.x}px`;
-    el.style.top = `${box.y}px`;
-    el.style.width = `${box.w}px`;
-    el.style.height = `${box.h}px`;
-    this.world.appendChild(el);
+    const textBox = document.createElement("div");
+    textBox.className = "page-text";
+    textBox.style.width = `${box.w}px`;
+    textBox.style.height = `${box.h}px`;
+    el.appendChild(textBox);
+    this.host.appendChild(el);
 
     const slot: Slot = {
       box,
       el,
+      textBox,
       base: null,
-      baseScale: 0,
       baseJob: null,
       detail: null,
       detailKey: "",
@@ -126,6 +160,7 @@ export class PageRenderer {
       text: null,
     };
     this.slots.set(index, slot);
+    this.position(slot);
     this.mountTextLayer(slot);
   }
 
@@ -133,11 +168,11 @@ export class PageRenderer {
     const page = this.doc.pages[slot.box.index];
     const container = document.createElement("div");
     container.className = "textLayer";
-    // Laid out at scale 1; the world transform scales it with the page.
+    // Laid out at scale 1; .page-text scales it to the current zoom.
     container.style.setProperty("--total-scale-factor", "1");
     container.style.setProperty("--scale-round-x", "1px");
     container.style.setProperty("--scale-round-y", "1px");
-    slot.el.appendChild(container);
+    slot.textBox.appendChild(container);
     const text = new TextLayer({
       textContentSource: page.streamTextContent(),
       container,
@@ -153,8 +188,8 @@ export class PageRenderer {
     slot.baseJob?.task.cancel();
     slot.detailJob?.task.cancel();
     slot.text?.cancel();
-    freeCanvas(slot.base);
-    freeCanvas(slot.detail);
+    freeCanvas(slot.base?.canvas);
+    freeCanvas(slot.detail?.canvas);
     slot.el.remove();
     this.slots.delete(index);
     // Drops cached drawing operations for this page.
@@ -190,20 +225,22 @@ export class PageRenderer {
       const distance = Math.abs(box.y + box.h / 2 - viewCenter);
       const cap = Math.sqrt(MAX_BASE_PIXELS / (box.w * box.h));
       const full = Math.min(target, cap);
-      const wanted = quantize(visible ? full : full * 0.5);
+      const wanted = visible ? full : full * 0.5;
 
       // Base bitmap: render right away if the page is blank, otherwise wait
       // until the zoom gesture ends so we don't redraw on every frame.
       const blank = !slot.base && !slot.baseJob;
-      const off = slot.baseScale < wanted * 0.85 || slot.baseScale > wanted * 2.5;
-      if (blank || (off && zoomSettled)) {
-        if (slot.baseJob?.scale !== wanted) {
-          jobs.push({ slot, kind: "base", scale: wanted, rect: null, key: String(wanted), priority: (visible ? 0 : 1e7) + distance });
-        }
+      const current = slot.base?.scale ?? 0;
+      const off = visible
+        ? Math.abs(current - wanted) > wanted * SCALE_TOLERANCE
+        : current < wanted * 0.85 || current > wanted * 2.5;
+      if ((blank || (off && zoomSettled)) && !sameScale(slot.baseJob?.scale, wanted)) {
+        const rect = { x: 0, y: 0, w: box.w, h: box.h };
+        jobs.push({ slot, kind: "base", scale: wanted, rect, key: "", priority: (visible ? 0 : 1e7) + distance });
       }
 
       // Detail bitmap for zoom levels above the base cap.
-      const needsDetail = visible && target > cap * 1.15;
+      const needsDetail = visible && target > cap * (1 + SCALE_TOLERANCE);
       if (!needsDetail) {
         if (slot.detail || slot.detailJob) this.dropDetail(slot);
         continue;
@@ -211,40 +248,38 @@ export class PageRenderer {
       if (!moveSettled) continue;
       const area = intersect(margin, box);
       if (!area) continue;
-      const scale = quantize(target);
-      const rect = {
-        x: Math.floor(area.x - box.x),
-        y: Math.floor(area.y - box.y),
-        w: Math.ceil(area.w) + 1,
-        h: Math.ceil(area.h) + 1,
-      };
-      const key = `${scale}:${rect.x}:${rect.y}:${rect.w}:${rect.h}`;
+      // Region edges on whole device pixels so the bitmap lines up exactly.
+      const x0 = Math.floor((area.x - box.x) * target) / target;
+      const y0 = Math.floor((area.y - box.y) * target) / target;
+      const x1 = Math.ceil((area.x + area.w - box.x) * target) / target;
+      const y1 = Math.ceil((area.y + area.h - box.y) * target) / target;
+      const rect = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+      const key = `${target}:${x0}:${y0}:${x1}:${y1}`;
       if (slot.detailKey !== key && slot.detailJob?.key !== key) {
-        jobs.push({ slot, kind: "detail", scale, rect, key, priority: 5e6 + distance });
+        jobs.push({ slot, kind: "detail", scale: target, rect, key, priority: 5e6 + distance });
       }
     }
     return jobs;
   }
 
   private start(job: Job): void {
-    const { slot } = job;
+    const { slot, rect, scale } = job;
     const current = job.kind === "base" ? slot.baseJob : slot.detailJob;
     current?.task.cancel();
 
     const page = this.doc.pages[slot.box.index];
-    const rect = job.rect ?? { x: 0, y: 0, w: slot.box.w, h: slot.box.h };
     const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1, Math.round(rect.w * job.scale));
-    canvas.height = Math.max(1, Math.round(rect.h * job.scale));
+    canvas.width = Math.max(1, Math.round(rect.w * scale));
+    canvas.height = Math.max(1, Math.round(rect.h * scale));
     canvas.className = job.kind === "base" ? "page-base" : "page-detail";
 
     const task = page.render({
       canvas,
-      viewport: page.getViewport({ scale: job.scale }),
-      transform: job.rect ? [1, 0, 0, 1, -rect.x * job.scale, -rect.y * job.scale] : undefined,
+      viewport: page.getViewport({ scale }),
+      transform: rect.x || rect.y ? [1, 0, 0, 1, -rect.x * scale, -rect.y * scale] : undefined,
       background: "#ffffff",
     });
-    if (job.kind === "base") slot.baseJob = { scale: job.scale, task };
+    if (job.kind === "base") slot.baseJob = { scale, task };
     else slot.detailJob = { key: job.key, task };
     this.running++;
 
@@ -254,24 +289,21 @@ export class PageRenderer {
           freeCanvas(canvas);
           return;
         }
+        const bitmap: Bitmap = { canvas, scale, rect };
+        placeBitmap(bitmap, this.camera.zoom);
         if (job.kind === "base") {
           slot.baseJob = null;
-          freeCanvas(slot.base);
-          slot.base?.remove();
-          slot.base = canvas;
-          slot.baseScale = job.scale;
+          freeCanvas(slot.base?.canvas);
+          slot.base?.canvas.remove();
+          slot.base = bitmap;
           slot.el.prepend(canvas);
         } else {
           slot.detailJob = null;
-          freeCanvas(slot.detail);
-          slot.detail?.remove();
-          canvas.style.left = `${rect.x}px`;
-          canvas.style.top = `${rect.y}px`;
-          canvas.style.width = `${rect.w}px`;
-          canvas.style.height = `${rect.h}px`;
-          slot.detail = canvas;
+          freeCanvas(slot.detail?.canvas);
+          slot.detail?.canvas.remove();
+          slot.detail = bitmap;
           slot.detailKey = job.key;
-          if (slot.base) slot.base.after(canvas);
+          if (slot.base) slot.base.canvas.after(canvas);
           else slot.el.prepend(canvas);
         }
       },
@@ -290,20 +322,37 @@ export class PageRenderer {
   private dropDetail(slot: Slot): void {
     slot.detailJob?.task.cancel();
     slot.detailJob = null;
-    freeCanvas(slot.detail);
-    slot.detail?.remove();
+    freeCanvas(slot.detail?.canvas);
+    slot.detail?.canvas.remove();
     slot.detail = null;
     slot.detailKey = "";
   }
 }
 
-/** Snaps a scale to quarter-octave steps so small zoom changes reuse bitmaps. */
-function quantize(scale: number): number {
-  return Math.pow(2, Math.ceil(Math.log2(scale) * 4) / 4);
+/**
+ * Sizes a bitmap so that, at the scale it was rendered for, one canvas pixel
+ * covers exactly one device pixel. At other zoom levels (mid-gesture) it is
+ * stretched until the sharper re-render arrives.
+ */
+function placeBitmap(bitmap: Bitmap, zoom: number): void {
+  const ratio = zoom / bitmap.scale; // CSS px per canvas px
+  const s = bitmap.canvas.style;
+  s.left = `${bitmap.rect.x * zoom}px`;
+  s.top = `${bitmap.rect.y * zoom}px`;
+  s.width = `${bitmap.canvas.width * ratio}px`;
+  s.height = `${bitmap.canvas.height * ratio}px`;
+}
+
+function snap(value: number, dpr: number): number {
+  return Math.round(value * dpr) / dpr;
+}
+
+function sameScale(a: number | undefined, b: number): boolean {
+  return a !== undefined && Math.abs(a - b) <= b * SCALE_TOLERANCE;
 }
 
 /** Releases a canvas' backing store right away (WebKit holds it otherwise). */
-function freeCanvas(canvas: HTMLCanvasElement | null): void {
+function freeCanvas(canvas: HTMLCanvasElement | null | undefined): void {
   if (!canvas) return;
   canvas.width = 0;
   canvas.height = 0;

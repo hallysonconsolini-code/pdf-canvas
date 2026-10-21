@@ -120,18 +120,20 @@ kbd {
   cursor: grabbing;
 }
 
-.world {
+.pages-layer {
+  position: absolute;
+  inset: 0;
+}
+
+/* Pages are placed in screen pixels by the renderer (no ancestor scale), so
+   bitmaps map 1:1 to device pixels. */
+.page {
   position: absolute;
   left: 0;
   top: 0;
-  transform-origin: 0 0;
-  will-change: transform;
-}
-
-.page {
-  position: absolute;
   background: #ffffff; /* pages stay white in dark mode */
   box-shadow: var(--page-shadow);
+  overflow: clip;
 }
 
 .page canvas {
@@ -139,10 +141,12 @@ kbd {
   display: block;
 }
 
-.page .page-base {
-  inset: 0;
-  width: 100%;
-  height: 100%;
+.page-text {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  z-index: 2;
 }
 
 .tool-pan .textLayer {
