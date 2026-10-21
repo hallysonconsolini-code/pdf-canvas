@@ -42,6 +42,18 @@
     "shortDescription": "Leitor de PDF com anotação livre",
     "macOS": {
       "minimumSystemVersion": "12.0"
-    }
+    },
+    "fileAssociations": [
+      {
+        "ext": [
+          "pdf"
+        ],
+        "name": "PDF",
+        "description": "Documento PDF",
+        "role": "Viewer",
+        "mimeType": "application/pdf"
+      }
+    ],
+    "copyright": "© 2026 Hallyson Consolini"
   }
 }

@@ -44,7 +44,15 @@ fn build_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
         .build()?;
 
     let open = MenuItemBuilder::with_id("open", "Abrir…").accelerator("CmdOrCtrl+O").build(app)?;
-    let file = SubmenuBuilder::new(app, "Arquivo").item(&open).build()?;
+    let export = MenuItemBuilder::with_id("export", "Exportar PDF anotado…").accelerator("CmdOrCtrl+Shift+E").build(app)?;
+    let close = MenuItemBuilder::with_id("close", "Fechar PDF").accelerator("CmdOrCtrl+W").build(app)?;
+    let file = SubmenuBuilder::new(app, "Arquivo")
+        .item(&open)
+        .separator()
+        .item(&export)
+        .separator()
+        .item(&close)
+        .build()?;
 
     // Undo/redo are app actions (annotations), not the web view's text undo.
     let undo = MenuItemBuilder::with_id("undo", "Desfazer").accelerator("CmdOrCtrl+Z").build(app)?;
@@ -60,9 +68,21 @@ fn build_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
         .item(&select_all)
         .build()?;
 
+    let thumbnails = MenuItemBuilder::with_id("thumbnails", "Miniaturas das páginas").accelerator("CmdOrCtrl+B").build(app)?;
+    let zoom_in = MenuItemBuilder::with_id("zoom-in", "Aumentar zoom").accelerator("CmdOrCtrl+=").build(app)?;
+    let zoom_out = MenuItemBuilder::with_id("zoom-out", "Diminuir zoom").accelerator("CmdOrCtrl+-").build(app)?;
+    let fit = MenuItemBuilder::with_id("fit-width", "Ajustar à largura").accelerator("CmdOrCtrl+0").build(app)?;
+    let view = SubmenuBuilder::new(app, "Visualizar")
+        .item(&thumbnails)
+        .separator()
+        .item(&zoom_in)
+        .item(&zoom_out)
+        .item(&fit)
+        .build()?;
+
     let window = SubmenuBuilder::new(app, "Janela").minimize().fullscreen().build()?;
 
-    MenuBuilder::new(app).items(&[&app_menu, &file, &edit, &window]).build()
+    MenuBuilder::new(app).items(&[&app_menu, &file, &edit, &view, &window]).build()
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -93,6 +113,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             files::read_file_bytes,
+            files::write_file_bytes,
             files::initial_file,
             sidecar::read_sidecar,
             sidecar::write_sidecar,
@@ -102,13 +123,29 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
-    app.run(|handle, event| {
+    app.run(|handle, event| match event {
         // Dock "Quit", logout, etc.
-        if let RunEvent::ExitRequested { api, code: None, .. } = event {
+        RunEvent::ExitRequested { api, code: None, .. } => {
             if !QUIT_ALLOWED.load(Ordering::SeqCst) {
                 api.prevent_exit();
                 request_quit(handle);
             }
         }
+        // Finder "Open With" / double-click on a PDF.
+        #[cfg(target_os = "macos")]
+        RunEvent::Opened { urls } => {
+            let path = urls
+                .iter()
+                .filter_map(|u| u.to_file_path().ok())
+                .map(|p| p.to_string_lossy().into_owned())
+                .find(|p| p.to_lowercase().ends_with(".pdf"));
+            if let Some(path) = path {
+                if let Ok(mut pending) = files::PENDING_OPEN.lock() {
+                    *pending = Some(path.clone());
+                }
+                let _ = handle.emit("open-file", path);
+            }
+        }
+        _ => {}
     });
 }
