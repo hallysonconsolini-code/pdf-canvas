@@ -1,5 +1,6 @@
 import type { Annotation, CameraState, SidecarFile } from "../model/types";
 import type { PdfDocument } from "../pdf/loader";
+import { migrate } from "./migrate";
 import { backupSidecar, confirm, readSidecar, showError, type SidecarLocation } from "../platform/tauri";
 
 export interface LoadedAnnotations {
@@ -12,7 +13,7 @@ export interface LoadedAnnotations {
 
 export function serializeSidecar(doc: PdfDocument, annotations: Annotation[], view: SidecarFile["view"]): string {
   const file: SidecarFile = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     pdf: { fileName: doc.fileName, fingerprint: doc.fingerprint, pageCount: doc.pages.length },
     view,
     annotations,
@@ -23,14 +24,13 @@ export function serializeSidecar(doc: PdfDocument, annotations: Annotation[], vi
 
 /** Validates a sidecar, dropping entries it can't understand. */
 export function parseSidecar(content: string): SidecarFile {
-  const raw = JSON.parse(content) as Partial<SidecarFile>;
-  if (raw.schemaVersion !== 1 || !Array.isArray(raw.annotations)) {
-    throw new Error("formato de arquivo desconhecido");
-  }
+  const parsed = JSON.parse(content);
+  if (!parsed || !Array.isArray(parsed.annotations)) throw new Error("formato de arquivo desconhecido");
+  const raw = migrate(parsed);
   const annotations = raw.annotations.filter(
     (a): a is Annotation => !!a && typeof a.id === "string" && typeof a.type === "string" && !!a.bbox,
   );
-  return { ...(raw as SidecarFile), annotations };
+  return { ...raw, annotations };
 }
 
 /**
