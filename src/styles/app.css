@@ -1,0 +1,375 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  /* clip (not hidden): WebKit can still scroll hidden boxes from script or
+     focus, which would shift the transformed canvas. */
+  overflow: clip;
+}
+
+body {
+  font-family: var(--font-ui);
+  font-size: var(--font-size-md);
+  color: var(--text);
+  background: var(--canvas-bg);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  border: 0;
+  background: none;
+  cursor: default;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+kbd {
+  font: inherit;
+  opacity: 0.7;
+  margin-left: var(--space-2);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.muted {
+  color: var(--text-muted);
+}
+
+/* ---- Start screen ---- */
+
+.start {
+  height: 100%;
+  display: grid;
+  place-items: center;
+}
+
+.start-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.start-card h1 {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.start-card p {
+  margin: 0 0 var(--space-2);
+}
+
+.btn-primary {
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 500;
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+}
+
+/* ---- Document canvas ---- */
+
+.document {
+  position: relative;
+  height: 100%;
+}
+
+.viewport {
+  position: absolute;
+  inset: 0;
+  overflow: clip;
+  touch-action: none;
+  overscroll-behavior: none;
+}
+
+.viewport.tool-pan {
+  cursor: grab;
+}
+
+.viewport.is-panning {
+  cursor: grabbing;
+}
+
+.world {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+.page {
+  position: absolute;
+  background: #ffffff; /* pages stay white in dark mode */
+  box-shadow: var(--page-shadow);
+}
+
+.page canvas {
+  position: absolute;
+  display: block;
+}
+
+.page .page-base {
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.tool-pan .textLayer {
+  pointer-events: none;
+}
+
+.tool-select .textLayer {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* ---- PDF.js text layer (adapted from pdf_viewer.css) ---- */
+
+.textLayer {
+  position: absolute;
+  inset: 0;
+  overflow: clip;
+  opacity: 1;
+  line-height: 1;
+  text-align: initial;
+  letter-spacing: normal;
+  word-spacing: normal;
+  -webkit-text-size-adjust: none;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  transform-origin: 0 0;
+  caret-color: CanvasText;
+  z-index: 2;
+  color-scheme: only light;
+
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
+}
+
+.textLayer :is(span, br) {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+
+.tool-pan .textLayer :is(span, br) {
+  cursor: inherit;
+}
+
+.textLayer > :not(.markedContent),
+.textLayer .markedContent span:not(.markedContent) {
+  z-index: 1;
+  --font-height: 0;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  --scale-x: 1;
+  --rotate: 0deg;
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+}
+
+.textLayer .markedContent {
+  display: contents;
+}
+
+.textLayer span[role="img"] {
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+}
+
+.textLayer ::selection {
+  background: color-mix(in srgb, AccentColor, transparent 60%);
+  color: transparent;
+}
+
+.textLayer br::selection {
+  background: transparent;
+}
+
+.textLayer .endOfContent {
+  display: block;
+  position: absolute;
+  inset: 100% 0 0;
+  z-index: 0;
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.textLayer.selecting .endOfContent {
+  top: 0;
+}
+
+/* ---- Floating chrome ---- */
+
+.toolbar,
+.statusbar {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  background: var(--surface);
+  backdrop-filter: blur(20px) saturate(1.6);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--float-shadow);
+}
+
+.toolbar {
+  top: var(--space-3);
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.statusbar {
+  right: var(--space-3);
+  bottom: var(--space-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.tool-btn,
+.icon-btn {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  transition: background var(--duration-fast);
+}
+
+.icon-btn {
+  width: 28px;
+  height: 28px;
+}
+
+.tool-btn:hover,
+.icon-btn:hover,
+.zoom-value:hover {
+  background: var(--surface-hover);
+}
+
+.tool-btn[aria-pressed="true"] {
+  background: var(--surface-active);
+  color: var(--accent);
+}
+
+[data-tip]:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  left: 50%;
+  transform: translateX(-50%);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface-solid);
+  border: 0.5px solid var(--border);
+  box-shadow: var(--float-shadow);
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.statusbar [data-tip]:hover::after {
+  top: auto;
+  bottom: calc(100% + var(--space-2));
+}
+
+.zoom-value {
+  position: relative;
+  min-width: 52px;
+  height: 28px;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+  text-align: center;
+}
+
+.page-field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-2) 0 var(--space-1);
+}
+
+.page-field input {
+  height: 24px;
+  padding: 0 var(--space-1);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-hover);
+  color: var(--text);
+  font: inherit;
+  text-align: center;
+}
+
+.divider {
+  width: 0.5px;
+  height: 16px;
+  background: var(--border);
+  margin: 0 var(--space-1);
+}
+
+.toast {
+  position: absolute;
+  left: 50%;
+  bottom: var(--space-4);
+  transform: translateX(-50%);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: var(--float-shadow);
+}
+
+.drop-overlay {
+  position: fixed;
+  inset: var(--space-3);
+  display: grid;
+  place-items: center;
+  border: 2px dashed var(--accent);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--accent), transparent 90%);
+  color: var(--accent);
+  font-size: var(--font-size-lg);
+  font-weight: 500;
+  pointer-events: none;
+  z-index: 100;
+}
