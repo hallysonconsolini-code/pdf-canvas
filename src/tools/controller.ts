@@ -3,7 +3,7 @@ import { eraserTool } from "./eraser";
 import { freehandTool } from "./freehand";
 import { lassoTool } from "./lasso";
 import { shapeTool } from "./shapes";
-import { editNote, textTool } from "./text";
+import { editNote, newTextAt, textTool } from "./text";
 import type { Tool, ToolContext, ToolGesture, ToolPoint } from "./Tool";
 
 const TOOLS: Partial<Record<ToolId, Tool>> = {
@@ -12,8 +12,10 @@ const TOOLS: Partial<Record<ToolId, Tool>> = {
   eraser: eraserTool,
   text: textTool,
   arrow: shapeTool("arrow"),
+  line: shapeTool("line"),
   rect: shapeTool("rect"),
   ellipse: shapeTool("ellipse"),
+  diamond: shapeTool("diamond"),
   lasso: lassoTool,
 };
 
@@ -30,7 +32,7 @@ export function attachTools(el: HTMLElement, ctx: ToolContext, activeTool: () =>
     const r = el.getBoundingClientRect();
     const w = ctx.camera.screenToWorld(e.clientX - r.left, e.clientY - r.top);
     const pressure = e.pointerType === "pen" ? Math.max(0.05, e.pressure) : 0.5;
-    return { x: w.x, y: w.y, pressure, shift: e.shiftKey };
+    return { x: w.x, y: w.y, pressure, shift: e.shiftKey, alt: e.altKey };
   };
 
   const onDown = (e: PointerEvent) => {
@@ -63,13 +65,15 @@ export function attachTools(el: HTMLElement, ctx: ToolContext, activeTool: () =>
   const onUp = (e: PointerEvent) => finish(e, false);
   const onCancel = (e: PointerEvent) => finish(e, true);
 
-  // Double-click a note with the selection tool to edit it.
+  // Selection tool, double-click: edit text, or start new text on empty space.
   const onDoubleClick = (e: MouseEvent) => {
     if (activeTool() !== "lasso" || fromEditor(e)) return;
     const r = el.getBoundingClientRect();
     const p = ctx.camera.screenToWorld(e.clientX - r.left, e.clientY - r.top);
-    const note = ctx.renderer.hitTest(p.x, p.y, 2 / ctx.camera.zoom, true).find((a) => a.type === "text");
+    const hits = ctx.renderer.hitTest(p.x, p.y, 2 / ctx.camera.zoom, true);
+    const note = hits.find((a) => a.type === "text");
     if (note && note.type === "text") editNote(ctx, note, false);
+    else if (!hits.length) editNote(ctx, newTextAt(ctx, p.x, p.y), true);
   };
 
   el.addEventListener("pointerdown", onDown);

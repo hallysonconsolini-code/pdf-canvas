@@ -1,11 +1,12 @@
 import type { TextNoteAnnotation } from "../model/types";
 import type { Camera } from "./camera";
-import { NOTE_FONT, NOTE_LINE_HEIGHT, NOTE_PADDING } from "./geometry";
+import { fontStack, lineHeight, measureText } from "./geometry";
 import { PEN_COLORS } from "./strokes";
 
 /**
- * In-place editor for a text note: a textarea laid over the canvas with the
- * same font, size and width as the drawn note, following pan and zoom.
+ * In-place text editor (Excalidraw style): a borderless textarea laid over
+ * the canvas with the same font as the drawn text. It grows with what is
+ * typed, never wraps, and follows pan and zoom.
  */
 export class NoteEditor {
   private el: HTMLTextAreaElement | null = null;
@@ -30,9 +31,10 @@ export class NoteEditor {
     const el = document.createElement("textarea");
     el.className = "note-editor";
     el.value = note.content;
+    el.wrap = "off";
     el.spellcheck = true;
-    el.setAttribute("aria-label", "Nota de texto");
-    el.addEventListener("input", () => this.autosize());
+    el.setAttribute("aria-label", "Texto");
+    el.addEventListener("input", () => this.position());
     el.addEventListener("blur", () => this.commit());
     el.addEventListener("keydown", (e) => {
       // Esc or ⌘↩ finishes editing; keep other keys away from shortcuts.
@@ -51,20 +53,24 @@ export class NoteEditor {
     el.setSelectionRange(el.value.length, el.value.length);
   }
 
-  /** Follows the camera; call every frame while open. */
+  /** Follows the camera and the typed text; call every frame while open. */
   position(): void {
     const { el, note } = this;
     if (!el || !note) return;
     const z = this.camera.zoom;
-    el.style.left = `${(note.bbox.x - this.camera.x) * z}px`;
-    el.style.top = `${(note.bbox.y - this.camera.y) * z}px`;
-    el.style.width = `${note.bbox.w * z}px`;
-    el.style.fontSize = `${note.fontSize * z}px`;
-    el.style.lineHeight = String(NOTE_LINE_HEIGHT);
-    el.style.padding = `${NOTE_PADDING * z}px`;
-    el.style.fontFamily = NOTE_FONT;
-    el.style.color = PEN_COLORS[note.color];
-    this.autosize();
+    const size = measureText({ content: el.value || " ", fontSize: note.fontSize, fontFamily: note.fontFamily });
+    const s = el.style;
+    s.left = `${(note.bbox.x - this.camera.x) * z}px`;
+    s.top = `${(note.bbox.y - this.camera.y) * z}px`;
+    // Room for the caret at the end of the longest line.
+    s.width = `${(size.w + note.fontSize) * z}px`;
+    s.height = `${size.h * z}px`;
+    s.fontSize = `${note.fontSize * z}px`;
+    s.lineHeight = String(lineHeight(note.fontFamily));
+    s.fontFamily = fontStack(note.fontFamily);
+    s.color = PEN_COLORS[note.color];
+    s.opacity = String((note.opacity ?? 100) / 100);
+    s.textAlign = note.textAlign;
   }
 
   /** Ends editing and reports the text. */
@@ -77,12 +83,5 @@ export class NoteEditor {
     const content = el.value.replace(/\s+$/, "");
     el.remove();
     onDone?.(content);
-  }
-
-  private autosize(): void {
-    const el = this.el;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
   }
 }
