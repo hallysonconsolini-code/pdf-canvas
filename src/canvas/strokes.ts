@@ -1,19 +1,31 @@
 import { getStroke } from "perfect-freehand";
 import type { ColorId, Rect, StrokeAnnotation, WidthId } from "../model/types";
 
-/** Stroke diameters in world units (PDF points). */
+/** Stroke widths in world units (PDF points). `pen` is Excalidraw's
+ *  strokeWidth (1 / 2 / 4), also used by shapes; highlighter is the diameter. */
 export const WIDTHS: Record<"pen" | "highlighter", Record<WidthId, number>> = {
-  pen: { thin: 1.5, medium: 2.75, thick: 5 },
+  pen: { thin: 1, medium: 2, thick: 4 },
   highlighter: { thin: 9, medium: 15, thick: 24 },
 };
 
+/** Stroke colors (Excalidraw's palette). */
 export const PEN_COLORS: Record<ColorId, string> = {
-  black: "#1d1d1f",
-  red: "#e0352b",
-  blue: "#1f6feb",
-  green: "#1a9b48",
-  yellow: "#e8a900",
-  pink: "#e0457f",
+  black: "#1e1e1e",
+  red: "#e03131",
+  blue: "#1971c2",
+  green: "#2f9e44",
+  yellow: "#f08c00",
+  pink: "#c2255c",
+};
+
+/** Shape background colors (Excalidraw's light palette). */
+export const BACKGROUND_COLORS: Record<ColorId, string> = {
+  black: "#e9ecef",
+  red: "#ffc9c9",
+  blue: "#a5d8ff",
+  green: "#b2f2bb",
+  yellow: "#ffec99",
+  pink: "#fcc2d7",
 };
 
 /** Opaque light tints: the highlight layer is multiplied over the page, so
@@ -34,8 +46,10 @@ export function strokeColor(a: Pick<StrokeAnnotation, "type" | "color">): string
   return a.type === "highlighter" ? HIGHLIGHT_COLORS[a.color] : PEN_COLORS[a.color];
 }
 
+/** Diameter of the drawn stroke. Pen follows Excalidraw's freedraw
+ *  (strokeWidth × 4.25, thinned by pressure). */
 export function strokeSize(a: Pick<StrokeAnnotation, "type" | "width">): number {
-  return WIDTHS[a.type][a.width];
+  return a.type === "pen" ? WIDTHS.pen[a.width] * 4.25 : WIDTHS.highlighter[a.width];
 }
 
 /** Mouse and trackpad report a constant 0.5; then pressure is simulated
@@ -53,11 +67,13 @@ export function strokeOutline(a: Pick<StrokeAnnotation, "type" | "width" | "poin
   if (a.type === "highlighter") {
     return getStroke(input, { size, thinning: 0, smoothing: 0.5, streamline: 0.4, simulatePressure: false, last });
   }
+  // Same settings as Excalidraw's freedraw tool.
   return getStroke(input, {
     size,
-    thinning: 0.55,
+    thinning: 0.6,
     smoothing: 0.5,
-    streamline: 0.4,
+    streamline: 0.5,
+    easing: (t) => Math.sin((t * Math.PI) / 2),
     simulatePressure: !hasRealPressure(a.points),
     last,
   });
