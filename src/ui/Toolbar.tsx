@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { ToolId } from "../model/types";
 import {
   ArrowIcon,
@@ -55,9 +55,71 @@ export const TOOL_GROUPS: ToolButton[][] = [
   ],
 ];
 
+const POSITION_KEY = "pdf-canvas.toolbarPosition";
+
+function loadPosition(): { x: number; y: number } | null {
+  try {
+    const p = JSON.parse(localStorage.getItem(POSITION_KEY) ?? "null");
+    return p && Number.isFinite(p.x) && Number.isFinite(p.y) ? p : null;
+  } catch {
+    return null;
+  }
+}
+
+function savePosition(p: { x: number; y: number } | null): void {
+  try {
+    if (p) localStorage.setItem(POSITION_KEY, JSON.stringify(p));
+    else localStorage.removeItem(POSITION_KEY);
+  } catch {
+    // Not critical.
+  }
+}
+
 export function Toolbar({ tool, onTool, locked, onLock }: Props) {
+  // null = default spot (top centre). Drag the grip to move; double-click resets.
+  const [pos, setPos] = useState(loadPosition);
+  const bar = useRef<HTMLDivElement>(null);
+
+  // Keep it on screen when the window shrinks.
+  useEffect(() => {
+    const clampToWindow = () => setPos((p) => (p ? clamp(p, bar.current) : p));
+    window.addEventListener("resize", clampToWindow);
+    return () => window.removeEventListener("resize", clampToWindow);
+  }, []);
+
+  const onGripDown = (e: React.PointerEvent) => {
+    const el = bar.current;
+    if (!el) return;
+    e.preventDefault();
+    const rect = el.getBoundingClientRect();
+    const dx = e.clientX - rect.left;
+    const dy = e.clientY - rect.top;
+    const grip = e.currentTarget as HTMLElement;
+    grip.setPointerCapture(e.pointerId);
+    const move = (ev: PointerEvent) => setPos(clamp({ x: ev.clientX - dx, y: ev.clientY - dy }, el));
+    const up = (ev: PointerEvent) => {
+      grip.removeEventListener("pointermove", move);
+      grip.removeEventListener("pointerup", up);
+      setPos(savePositionAndReturn(clamp({ x: ev.clientX - dx, y: ev.clientY - dy }, el)));
+    };
+    grip.addEventListener("pointermove", move);
+    grip.addEventListener("pointerup", up);
+  };
+
+  const style = pos ? { left: pos.x, top: pos.y, transform: "none" } : undefined;
+
   return (
-    <div className="toolbar" role="toolbar" aria-label="Ferramentas">
+    <div className="toolbar" role="toolbar" aria-label="Ferramentas" ref={bar} style={style}>
+      <span
+        className="toolbar-grip"
+        aria-hidden="true"
+        data-tip="Arraste para mover · duplo clique volta ao topo"
+        onPointerDown={onGripDown}
+        onDoubleClick={() => {
+          savePosition(null);
+          setPos(null);
+        }}
+      />
       <button
         className="tool-btn lock-btn"
         aria-pressed={locked}
@@ -87,4 +149,18 @@ export function Toolbar({ tool, onTool, locked, onLock }: Props) {
       ))}
     </div>
   );
+}
+
+function clamp(p: { x: number; y: number }, el: HTMLElement | null): { x: number; y: number } {
+  const w = el?.offsetWidth ?? 0;
+  const h = el?.offsetHeight ?? 0;
+  return {
+    x: Math.max(8, Math.min(window.innerWidth - w - 8, p.x)),
+    y: Math.max(8, Math.min(window.innerHeight - h - 8, p.y)),
+  };
+}
+
+function savePositionAndReturn(p: { x: number; y: number }) {
+  savePosition(p);
+  return p;
 }

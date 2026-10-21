@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
-import { ask, message, open } from "@tauri-apps/plugin-dialog";
+import { ask, message, open, save } from "@tauri-apps/plugin-dialog";
 
 /** False when the UI runs in a plain browser (vite dev without Tauri). */
 export const isTauri = "__TAURI_INTERNALS__" in window;
@@ -16,6 +16,14 @@ export async function readFileBytes(path: string): Promise<Uint8Array> {
 export async function initialFile(): Promise<string | null> {
   if (!isTauri) return null;
   return invoke<string | null>("initial_file");
+}
+
+/** Reads a PDF from disk (or, in the browser dev mode, from the dev server). */
+export async function readPdfBytes(path: string): Promise<Uint8Array> {
+  if (isTauri) return readFileBytes(path);
+  const res = await fetch(path);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return new Uint8Array(await res.arrayBuffer());
 }
 
 export async function pickPdf(): Promise<string | null> {
@@ -97,7 +105,17 @@ export async function backupSidecar(pdfPath: string): Promise<string | null> {
 
 // ---- app menu and quitting -------------------------------------------------
 
-export type MenuAction = "open" | "undo" | "redo" | "select-all";
+export type MenuAction =
+  | "open"
+  | "export"
+  | "close"
+  | "undo"
+  | "redo"
+  | "select-all"
+  | "thumbnails"
+  | "zoom-in"
+  | "zoom-out"
+  | "fit-width";
 
 export function onMenu(handler: (action: MenuAction) => void): () => void {
   if (!isTauri) return () => {};
@@ -116,6 +134,40 @@ export function onQuitRequested(save: () => Promise<void>): () => void {
     } finally {
       await invoke("quit_now");
     }
+  });
+  return () => {
+    pending.then((unlisten) => unlisten()).catch(() => {});
+  };
+}
+
+/** Asks where to save a PDF. */
+export async function pickSavePath(defaultPath: string): Promise<string | null> {
+  if (!isTauri) return defaultPath;
+  return save({ defaultPath, filters: [{ name: "PDF", extensions: ["pdf"] }] });
+}
+
+/** Writes bytes to a file (raw IPC body, no JSON encoding). In the browser
+ *  dev mode the file is downloaded instead. */
+export async function writeFileBytes(path: string, bytes: Uint8Array): Promise<void> {
+  if (!isTauri) {
+    const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: "application/pdf" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = path.split("/").pop() ?? "export.pdf";
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    return;
+  }
+  await invoke("write_file_bytes", bytes, { headers: { path: encodeURIComponent(path) } });
+}
+
+/** PDFs opened from Finder ("Abrir com", double-click) while running. */
+export function onOpenFile(handler: (path: string) => void): () => void {
+  if (!isTauri) return () => {};
+  const pending = listen<string>("open-file", (e) => {
+    // Consume it so a later startup check doesn't open it twice.
+    invoke("initial_file").catch(() => {});
+    handler(e.payload);
   });
   return () => {
     pending.then((unlisten) => unlisten()).catch(() => {});

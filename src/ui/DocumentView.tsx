@@ -3,10 +3,13 @@ import { withBBox } from "../canvas/geometry";
 import { Viewport, type ViewStatus, type ViewportHandle } from "../canvas/Viewport";
 import type { Annotation, ItemStyle, ToolId } from "../model/types";
 import type { SaveState } from "../persistence/autosave";
+import { pickSavePath, readPdfBytes, showError, writeFileBytes, type MenuAction } from "../platform/tauri";
 import type { Session } from "../session";
 import { newTextAt } from "../tools/text";
+import { ExportDialog } from "./ExportDialog";
 import { PropertiesPanel } from "./PropertiesPanel";
 import { StatusBar } from "./StatusBar";
+import { Thumbnails } from "./Thumbnails";
 import { TOOL_GROUPS, Toolbar } from "./Toolbar";
 import { useItemStyle } from "./useItemStyle";
 
@@ -36,8 +39,65 @@ export function DocumentView({ session, save }: Props) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [storeVersion, setStoreVersion] = useState(0);
   const { style, highlighter, setStyle, setHighlighter } = useItemStyle();
-  const live = useRef({ tool, locked });
-  live.current = { tool, locked };
+  const [showThumbs, setShowThumbs] = useState(() => readFlag(THUMBS_KEY));
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const live = useRef({ tool, locked, exportOpen });
+  live.current = { tool, locked, exportOpen };
+
+  const toggleThumbs = useCallback(() => {
+    setShowThumbs((v) => {
+      writeFlag(THUMBS_KEY, !v);
+      return !v;
+    });
+  }, []);
+
+  // Commands from the native menu (zoom, thumbnails, export).
+  useEffect(() => {
+    const onMenu = (e: Event) => {
+      const action = (e as CustomEvent<MenuAction>).detail;
+      const v = viewport.current;
+      if (action === "zoom-in") v?.zoomBy(1.25);
+      else if (action === "zoom-out") v?.zoomBy(1 / 1.25);
+      else if (action === "fit-width") v?.fitWidth();
+      else if (action === "thumbnails") toggleThumbs();
+      else if (action === "export") setExportOpen(true);
+    };
+    window.addEventListener("pdf-canvas:menu", onMenu);
+    return () => window.removeEventListener("pdf-canvas:menu", onMenu);
+  }, [toggleThumbs]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = window.setTimeout(() => setToast(null), 4000);
+    return () => window.clearTimeout(t);
+  }, [toast]);
+
+  const runExport = async (includeScratch: boolean) => {
+    const base = doc.path.replace(/\.pdf$/i, "");
+    const target = await pickSavePath(`${base} (anotado).pdf`);
+    if (!target) return;
+    setExporting(true);
+    try {
+      // pdf-lib is only loaded when exporting.
+      const { exportAnnotatedPdf } = await import("../export/exportPdf");
+      const source = await readPdfBytes(doc.path);
+      const bytes = await exportAnnotatedPdf(doc, source, store.all(), { includeScratch });
+      await writeFileBytes(target, bytes);
+      setExportOpen(false);
+      setToast(`PDF exportado: ${target.split("/").pop()}`);
+    } catch (err) {
+      const text = String((err as Error)?.message ?? err);
+      showError(
+        /encrypt/i.test(text)
+          ? "Este PDF é protegido e não pode ser modificado, então não dá para exportar com anotações."
+          : `Não foi possível exportar o PDF.\n\n${text}`,
+      );
+    } finally {
+      setExporting(false);
+    }
+  };
 
   useEffect(() => store.subscribe(() => setStoreVersion((v) => v + 1)), [store]);
 
@@ -75,14 +135,11 @@ export function DocumentView({ session, save }: Props) {
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (isTyping(e.target)) return;
+      if (isTyping(e.target) || live.current.exportOpen) return;
       const v = viewport.current;
       if (!v) return;
       const mod = e.metaKey || e.ctrlKey;
 
-      if (mod && (e.key === "=" || e.key === "+")) return run(e, () => v.zoomBy(1.25));
-      if (mod && e.key === "-") return run(e, () => v.zoomBy(1 / 1.25));
-      if (mod && e.key === "0") return run(e, () => v.fitWidth());
       if (mod && e.key.toLowerCase() === "d") return run(e, () => v.duplicateSelection());
       if (mod || e.altKey) return;
 
@@ -187,8 +244,11 @@ export function DocumentView({ session, save }: Props) {
   const onStatus = useCallback((s: ViewStatus) => setStatus(s), []);
   const onViewChange = useCallback(() => session.autosave.viewChanged(), [session]);
 
+  const scratchCount = exportOpen ? store.all().filter((a) => a.page === null).length : 0;
+
   return (
-    <div className="document">
+    <div className={`document${showThumbs ? " with-thumbnails" : ""}`}>
+      {showThumbs && <Thumbnails doc={doc} current={status.page} onGoTo={(i) => viewport.current?.goToPage(i)} />}
       <Viewport
         ref={viewport}
         doc={doc}
@@ -223,8 +283,40 @@ export function DocumentView({ session, save }: Props) {
         onZoomBy={(f) => viewport.current?.zoomBy(f)}
         onFitWidth={() => viewport.current?.fitWidth()}
       />
+      {exportOpen && (
+        <ExportDialog
+          onPage={store.size - scratchCount}
+          scratch={scratchCount}
+          busy={exporting}
+          onExport={runExport}
+          onCancel={() => setExportOpen(false)}
+        />
+      )}
+      {toast && (
+        <div className="toast" role="status">
+          {toast}
+        </div>
+      )}
     </div>
   );
+}
+
+const THUMBS_KEY = "pdf-canvas.showThumbnails";
+
+function readFlag(key: string): boolean {
+  try {
+    return localStorage.getItem(key) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeFlag(key: string, value: boolean): void {
+  try {
+    localStorage.setItem(key, value ? "1" : "0");
+  } catch {
+    // Not critical.
+  }
 }
 
 /** Minimal context for building a text item outside a tool gesture. */

@@ -10,7 +10,7 @@ Feito com Tauri 2, React, TypeScript e PDF.js.
 - [x] Fase 1: abrir PDF, canvas infinito com pan/zoom, renderização virtualizada
 - [x] Fase 2: caneta, marca-texto, borracha, desfazer/refazer, autosave
 - [x] Fase 3: notas de texto, formas, seleção por laço, marca-texto no texto
-- [ ] Fase 4: exportar PDF, recentes, miniaturas, build final
+- [x] Fase 4: exportar PDF, recentes, miniaturas, build final
 
 ## Requisitos
 
@@ -26,11 +26,17 @@ npm install
 npm run tauri dev
 ```
 
-Gerar o app (`src-tauri/target/release/bundle/macos/PDF Canvas.app`):
+Gerar o app e o instalador:
 
 ```bash
-npm run tauri build -- --bundles app
+npm run tauri build
 ```
+
+- App: `src-tauri/target/release/bundle/macos/PDF Canvas.app`
+- Instalador: `src-tauri/target/release/bundle/dmg/PDF Canvas_0.1.0_aarch64.dmg`
+
+O app não é assinado com certificado da Apple. No seu Mac ele abre normalmente;
+em outro Mac, na primeira vez use clique direito > Abrir.
 
 Abrir um arquivo direto na inicialização:
 
@@ -62,7 +68,10 @@ Desenho e escrita seguem o Excalidraw:
 
 | Ação | Atalho |
 |---|---|
-| Abrir PDF | ⌘O ou arrastar o arquivo para a janela |
+| Abrir PDF | ⌘O, arrastar o arquivo para a janela, ou "Abrir com" no Finder |
+| Fechar PDF (volta para os recentes) | ⌘W |
+| Exportar PDF anotado | ⇧⌘E |
+| Miniaturas das páginas | ⌘B |
 | Mão (pan) | H, ou segurar Espaço |
 | Seleção | V ou 1 |
 | Retângulo / Losango / Elipse | R ou 2 / D ou 3 / O ou 4 |
@@ -89,6 +98,21 @@ Desenho e escrita seguem o Excalidraw:
 Formas: Shift faz quadrado/círculo ou ângulos de 15°; Alt desenha a partir do
 centro. Na Seleção: clique seleciona (Shift soma), arrastar no vazio desenha o
 laço, as 8 alças redimensionam (Shift mantém a proporção).
+
+## Exportar
+
+⇧⌘E cria um novo PDF com as anotações desenhadas nas páginas, em vetor: o
+traço à mão, o texto manuscrito (fonte embutida) e o marca-texto (multiplicado,
+o texto continua legível) saem iguais à tela. O PDF original não é alterado.
+O que estiver fora das páginas pode ir para uma página extra de "Rascunhos" no
+final (opção no diálogo).
+
+## Interface
+
+- Tela inicial com os 15 PDFs abertos mais recentemente.
+- Barra de ferramentas arrastável pela alça à esquerda; duplo clique na alça
+  volta ao topo. A posição é lembrada.
+- Miniaturas (⌘B) carregam só as páginas visíveis na lista.
 
 ## Fontes
 
@@ -128,5 +152,8 @@ Excalifont (SIL Open Font License 1.1), do Excalidraw. Veja
 - `src/canvas/geometry.ts`: desenho, colisão e transformação de todos os tipos;
   formas via rough.js com as mesmas opções do Excalidraw e semente fixa por
   item (o rabisco não muda ao redesenhar).
+- `src/export/exportPdf.ts`: exportação com pdf-lib. Usa a viewport do PDF.js
+  para mapear coordenadas, então páginas giradas também funcionam.
+- Camadas de anotação só ocupam memória quando têm algo para mostrar.
 - O PDF.js vem do build `legacy`, porque o WebView do macOS ainda não tem
   algumas APIs JS novas usadas pelo build moderno.

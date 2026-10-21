@@ -115,7 +115,7 @@ export function arrowHeadLength(a: Pick<ShapeAnnotation, "from" | "to" | "width"
   return Math.min(14 + strokeWidthOf(a) * 2, len * 0.4);
 }
 
-function shapeDrawables(a: ShapeAnnotation): Drawable[] {
+export function shapeDrawables(a: ShapeAnnotation): Drawable[] {
   generator ??= rough.generator();
   const g = generator;
   const o = roughOptions(a);

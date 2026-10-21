@@ -1,4 +1,4 @@
-import { newSeed, withBBox } from "../canvas/geometry";
+import { newSeed, round, withBBox } from "../canvas/geometry";
 import { newId } from "../model/document";
 import type { ShapeAnnotation, Vec2 } from "../model/types";
 import { placeOnPage } from "./place";
@@ -30,8 +30,8 @@ export function shapeTool(type: ShapeAnnotation["type"]): Tool {
           type,
           color: style.color,
           width: style.width,
-          from,
-          to,
+          from: { x: round(from.x), y: round(from.y) },
+          to: { x: round(to.x), y: round(to.y) },
           fill: style.fill,
           fillStyle: style.fillStyle,
           strokeStyle: style.strokeStyle,

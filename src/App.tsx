@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SaveState } from "./persistence/autosave";
+import { addRecent, loadRecents, removeRecent, type RecentFile } from "./persistence/recents";
 import { loadPdf } from "./pdf/loader";
 import {
   initialFile,
   isTauri,
   onMenu,
+  onOpenFile,
   onPdfDrop,
   onQuitRequested,
   pickPdf,
-  readFileBytes,
+  readPdfBytes,
   setWindowTitle,
   showError,
   type MenuAction,
@@ -22,6 +24,7 @@ export default function App() {
   const [save, setSave] = useState<SaveState>({ kind: "idle" });
   const [loading, setLoading] = useState(false);
   const [dropping, setDropping] = useState(false);
+  const [recents, setRecents] = useState<RecentFile[]>(loadRecents);
   const sessionRef = useRef<Session | null>(null);
   const busy = useRef(false);
 
@@ -31,7 +34,7 @@ export default function App() {
     setLoading(true);
     const started = performance.now();
     try {
-      const data = isTauri ? await readFileBytes(path) : await fetchDevFile(path);
+      const data = await readPdfBytes(path);
       const doc = await loadPdf(path, data);
       const previous = sessionRef.current;
       finishTyping();
@@ -41,14 +44,21 @@ export default function App() {
       setSave({ kind: "idle" });
       setSession(next);
       setWindowTitle(doc.fileName);
+      if (isTauri) setRecents(addRecent(path, doc.fileName));
       console.info(`opened ${doc.fileName}: ${doc.pages.length} pages in ${Math.round(performance.now() - started)} ms`);
     } catch (err) {
       const name = (err as { name?: string })?.name;
-      showError(
-        name === "PasswordException"
-          ? "Este PDF é protegido por senha. Ainda não há suporte para PDFs com senha."
-          : `Não foi possível abrir o PDF.\n\n${String((err as Error)?.message ?? err)}`,
-      );
+      const text = String((err as Error)?.message ?? err);
+      if (text.includes("os error 2")) {
+        setRecents(removeRecent(path));
+        showError(`Arquivo não encontrado. Ele pode ter sido movido ou apagado.\n\n${path}`);
+      } else {
+        showError(
+          name === "PasswordException"
+            ? "Este PDF é protegido por senha. Ainda não há suporte para PDFs com senha."
+            : `Não foi possível abrir o PDF.\n\n${text}`,
+        );
+      }
     } finally {
       busy.current = false;
       setLoading(false);
@@ -60,10 +70,32 @@ export default function App() {
     if (path) await openPath(path);
   }, [openPath]);
 
+  /** Saves and closes the current PDF, back to the start screen. */
+  const closeCurrent = useCallback(async () => {
+    const current = sessionRef.current;
+    if (!current || busy.current) return;
+    finishTyping();
+    sessionRef.current = null;
+    setSession(null);
+    setSave({ kind: "idle" });
+    setWindowTitle("PDF Canvas");
+    await closeSession(current);
+    setRecents(loadRecents());
+  }, []);
+
   const runMenu = useCallback(
     (action: MenuAction) => {
       if (action === "open") {
         openDialog();
+        return;
+      }
+      if (action === "close") {
+        closeCurrent();
+        return;
+      }
+      // Document actions are handled by the open document's view.
+      if (action === "export" || action === "thumbnails" || action === "zoom-in" || action === "zoom-out" || action === "fit-width") {
+        window.dispatchEvent(new CustomEvent("pdf-canvas:menu", { detail: action }));
         return;
       }
       // Inside a text field, these edit the text instead.
@@ -79,11 +111,12 @@ export default function App() {
       if (action === "undo") store?.undo();
       else store?.redo();
     },
-    [openDialog],
+    [openDialog, closeCurrent],
   );
 
   useEffect(() => onPdfDrop({ hover: setDropping, drop: openPath }), [openPath]);
   useEffect(() => onMenu(runMenu), [runMenu]);
+  useEffect(() => onOpenFile(openPath), [openPath]);
   useEffect(
     () =>
       onQuitRequested(async () => {
@@ -111,6 +144,11 @@ export default function App() {
       if (!e.metaKey && !e.ctrlKey) return;
       const key = e.key.toLowerCase();
       if (key === "o") runMenu("open");
+      else if (key === "e" && e.shiftKey) runMenu("export");
+      else if (key === "b") runMenu("thumbnails");
+      else if (key === "=" || key === "+") runMenu("zoom-in");
+      else if (key === "-") runMenu("zoom-out");
+      else if (key === "0") runMenu("fit-width");
       else if (key === "z") runMenu(e.shiftKey ? "redo" : "undo");
       else if (key === "a" && !isTyping(e.target)) runMenu("select-all");
       else return;
@@ -132,18 +170,18 @@ export default function App() {
       {session ? (
         <DocumentView key={session.doc.path + session.doc.fingerprint} session={session} save={save} />
       ) : (
-        <StartScreen loading={loading} onOpen={openDialog} />
+        <StartScreen
+          loading={loading}
+          recents={recents}
+          onOpen={openDialog}
+          onOpenRecent={openPath}
+          onForget={(path) => setRecents(removeRecent(path))}
+        />
       )}
       {session && loading && <div className="toast">Abrindo…</div>}
       {dropping && <div className="drop-overlay">Solte o PDF para abrir</div>}
     </>
   );
-}
-
-async function fetchDevFile(url: string): Promise<Uint8Array> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return new Uint8Array(await res.arrayBuffer());
 }
 
 /** Commits a text note being edited (its editor saves on blur). */
