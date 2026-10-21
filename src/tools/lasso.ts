@@ -1,27 +1,27 @@
-import { HANDLE_PX } from "../canvas/annotationRenderer";
+import { BOX_PAD_PX, HANDLE_PX, HANDLES } from "../canvas/annotationRenderer";
 import { pointInPolygon, samplePoints, transformAnnotation, union, type PointMap } from "../canvas/geometry";
+import { newId } from "../model/document";
 import type { Annotation, Rect, Vec2 } from "../model/types";
 import { placeOnPage } from "./place";
 import { noGesture, type Tool, type ToolContext, type ToolGesture, type ToolPoint } from "./Tool";
 
-/** Selection box padding drawn around the items, in screen pixels. */
-const BOX_PAD_PX = 4;
 /** Share of an item's sample points that must fall inside the lasso. */
 const LASSO_COVERAGE = 0.5;
 
 /**
- * Selection tool:
- * - click an annotation to select it (Shift adds/removes), then drag to move
+ * Selection tool (Excalidraw style):
+ * - click an item to select it (Shift adds/removes), drag to move
+ * - Alt + drag duplicates
  * - drag on empty space to draw a lasso
- * - drag a corner handle to resize, drag inside the box to move
+ * - drag a handle to resize (corners: both axes, edges: one axis)
  */
 export const lassoTool: Tool = {
   begin(ctx: ToolContext, start: ToolPoint): ToolGesture {
     const items = selectedItems(ctx);
     if (items.length && !start.shift) {
       const box = union(items.map((a) => a.bbox));
-      const corner = cornerAt(ctx, box, start);
-      if (corner) return resizeGesture(ctx, items, box, corner);
+      const handle = handleAt(ctx, box, start);
+      if (handle) return resizeGesture(ctx, items, box, handle);
       if (insideBox(ctx, box, start)) return moveGesture(ctx, items, start);
     }
 
@@ -48,18 +48,39 @@ export function selectedItems(ctx: Pick<ToolContext, "selection" | "store">): An
   });
 }
 
-function moveGesture(ctx: ToolContext, items: Annotation[], start: Vec2): ToolGesture {
+/** Copies with new ids, shifted by (dx, dy). */
+export function duplicate(items: Annotation[], dx: number, dy: number): Annotation[] {
+  return items.map((a) => ({
+    ...transformAnnotation(a, (q) => ({ x: q.x + dx, y: q.y + dy })),
+    id: newId(),
+    createdAt: Date.now(),
+  }));
+}
+
+function moveGesture(ctx: ToolContext, items: Annotation[], start: ToolPoint): ToolGesture {
   let moved: Annotation[] = [];
+  // Alt + drag: originals stay, copies (with temporary ids) follow the pointer.
+  const copy = start.alt;
   return {
     move(points) {
       const p = points[points.length - 1];
       const dx = p.x - start.x;
       const dy = p.y - start.y;
       moved = apply(items, (q) => ({ x: q.x + dx, y: q.y + dy }));
-      show(ctx, moved);
+      if (copy) moved = moved.map((a) => ({ ...a, id: `copy:${a.id}` }));
+      ctx.renderer.setPreview(moved);
+      ctx.renderer.setSelectionBox(union(moved.map((a) => a.bbox)));
     },
     end() {
-      commit(ctx, items, moved);
+      if (!copy) {
+        commit(ctx, items, moved);
+        return;
+      }
+      ctx.renderer.setPreview([]);
+      if (!moved.length) return;
+      const copies = moved.map((a) => placeOnPage(ctx, { ...a, id: newId(), createdAt: Date.now() }));
+      ctx.store.add(copies);
+      ctx.selection.set(copies.map((a) => a.id));
     },
     cancel() {
       reset(ctx);
@@ -67,25 +88,27 @@ function moveGesture(ctx: ToolContext, items: Annotation[], start: Vec2): ToolGe
   };
 }
 
-function resizeGesture(ctx: ToolContext, items: Annotation[], box: Rect, corner: Vec2): ToolGesture {
-  // Scale around the opposite corner.
-  const anchor = {
-    x: corner.x === box.x ? box.x + box.w : box.x,
-    y: corner.y === box.y ? box.y + box.h : box.y,
-  };
+function resizeGesture(ctx: ToolContext, items: Annotation[], box: Rect, handle: [number, number]): ToolGesture {
+  const [fx, fy] = handle;
+  // Scale around the opposite side; edge handles scale one axis only.
+  const anchor = { x: box.x + box.w * (1 - fx), y: box.y + box.h * (1 - fy) };
+  const corner = { x: box.x + box.w * fx, y: box.y + box.h * fy };
+  const onlyText = items.every((a) => a.type === "text");
   let moved: Annotation[] = [];
   return {
     move(points) {
       const p = points[points.length - 1];
-      let sx = safeScale((p.x - anchor.x) / (corner.x - anchor.x || 1));
-      let sy = safeScale((p.y - anchor.y) / (corner.y - anchor.y || 1));
-      if (p.shift) {
-        const s = Math.max(Math.abs(sx), Math.abs(sy));
+      let sx = fx === 0.5 ? 1 : safeScale((p.x - anchor.x) / (corner.x - anchor.x || 1));
+      let sy = fy === 0.5 ? 1 : safeScale((p.y - anchor.y) / (corner.y - anchor.y || 1));
+      // Text keeps its proportions, as in Excalidraw.
+      if (p.shift || onlyText) {
+        const s = fx === 0.5 ? Math.abs(sy) : fy === 0.5 ? Math.abs(sx) : Math.max(Math.abs(sx), Math.abs(sy));
         sx = Math.sign(sx) * s;
         sy = Math.sign(sy) * s;
       }
       moved = apply(items, (q) => ({ x: anchor.x + (q.x - anchor.x) * sx, y: anchor.y + (q.y - anchor.y) * sy }));
-      show(ctx, moved);
+      ctx.renderer.setPreview(moved);
+      showBox(ctx, moved);
     },
     end() {
       commit(ctx, items, moved);
@@ -130,8 +153,7 @@ function apply(items: Annotation[], map: PointMap): Annotation[] {
   return items.map((a) => transformAnnotation(a, map));
 }
 
-function show(ctx: ToolContext, moved: Annotation[]): void {
-  ctx.renderer.setPreview(moved);
+function showBox(ctx: ToolContext, moved: Annotation[]): void {
   ctx.renderer.setSelectionBox(union(moved.map((a) => a.bbox)));
 }
 
@@ -148,19 +170,18 @@ function reset(ctx: ToolContext): void {
   ctx.renderer.setSelectionBox(items.length ? union(items.map((a) => a.bbox)) : null);
 }
 
-/** Corner handle under the pointer, if any (handles are drawn in screen pixels). */
-function cornerAt(ctx: ToolContext, box: Rect, p: Vec2): Vec2 | null {
+/** Handle under the pointer, if any (handles are drawn in screen pixels). */
+function handleAt(ctx: ToolContext, box: Rect, p: Vec2): [number, number] | null {
   const pad = BOX_PAD_PX / ctx.camera.zoom;
   const reach = HANDLE_PX / ctx.camera.zoom;
-  for (const c of [
-    { x: box.x, y: box.y },
-    { x: box.x + box.w, y: box.y },
-    { x: box.x, y: box.y + box.h },
-    { x: box.x + box.w, y: box.y + box.h },
-  ]) {
-    const hx = c.x + (c.x === box.x ? -pad : pad);
-    const hy = c.y + (c.y === box.y ? -pad : pad);
-    if (Math.abs(p.x - hx) <= reach && Math.abs(p.y - hy) <= reach) return c;
+  const x = box.x - pad;
+  const y = box.y - pad;
+  const w = box.w + pad * 2;
+  const h = box.h + pad * 2;
+  for (const handle of HANDLES) {
+    const hx = x + w * handle[0];
+    const hy = y + h * handle[1];
+    if (Math.abs(p.x - hx) <= reach && Math.abs(p.y - hy) <= reach) return handle;
   }
   return null;
 }

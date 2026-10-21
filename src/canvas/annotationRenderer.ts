@@ -4,8 +4,21 @@ import type { Camera } from "./camera";
 import { distanceTo, drawAnnotation, isHighlightLayer } from "./geometry";
 import { overlaps, SpatialIndex } from "./spatialIndex";
 
-/** Screen size of the selection corner handles, in CSS pixels. */
+/** Screen size of the selection handles, in CSS pixels. */
 export const HANDLE_PX = 8;
+/** Selection box padding around the items, in CSS pixels. */
+export const BOX_PAD_PX = 4;
+/** Handle positions as fractions of the box: corners and edge midpoints. */
+export const HANDLES: [number, number][] = [
+  [0, 0],
+  [0.5, 0],
+  [1, 0],
+  [1, 0.5],
+  [1, 1],
+  [0.5, 1],
+  [0, 1],
+  [0, 0.5],
+];
 
 /**
  * Draws annotations on screen-sized canvases (crisp at any zoom):
@@ -191,7 +204,7 @@ export class AnnotationRenderer {
     if (box) {
       const a = toScreen({ x: box.x, y: box.y });
       const b = toScreen({ x: box.x + box.w, y: box.y + box.h });
-      const pad = 4;
+      const pad = BOX_PAD_PX;
       const x = Math.round(a.x - pad) + 0.5;
       const y = Math.round(a.y - pad) + 0.5;
       const w = Math.round(b.x - a.x + pad * 2);
@@ -200,12 +213,9 @@ export class AnnotationRenderer {
       ctx.lineWidth = 1;
       ctx.strokeRect(x, y, w, h);
       ctx.fillStyle = "#ffffff";
-      for (const [hx, hy] of [
-        [x, y],
-        [x + w, y],
-        [x, y + h],
-        [x + w, y + h],
-      ]) {
+      for (const [fx, fy] of HANDLES) {
+        const hx = x + w * fx;
+        const hy = y + h * fy;
         ctx.fillRect(hx - HANDLE_PX / 2, hy - HANDLE_PX / 2, HANDLE_PX, HANDLE_PX);
         ctx.strokeRect(hx - HANDLE_PX / 2, hy - HANDLE_PX / 2, HANDLE_PX, HANDLE_PX);
       }
