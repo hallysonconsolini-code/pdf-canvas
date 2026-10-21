@@ -104,3 +104,42 @@ export const EllipseIcon = () => (
     <ellipse cx="12" cy="12" rx="9" ry="7" />
   </svg>
 );
+
+export const DiamondIcon = () => (
+  <svg {...base}>
+    <path d="M12 3 21 12 12 21 3 12z" />
+  </svg>
+);
+
+export const LineIcon = () => (
+  <svg {...base}>
+    <path d="M5 19 19 5" />
+  </svg>
+);
+
+export const LockIcon = ({ locked }: { locked: boolean }) => (
+  <svg {...base}>
+    <rect x="5" y="11" width="14" height="10" rx="2" />
+    <path d={locked ? "M8 11V7a4 4 0 0 1 8 0v4" : "M8 11V7a4 4 0 0 1 7.5-2"} />
+  </svg>
+);
+
+export const TrashIcon = () => (
+  <svg {...base}>
+    <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />
+  </svg>
+);
+
+export const CopyIcon = () => (
+  <svg {...base}>
+    <rect x="8" y="8" width="12" height="12" rx="2" />
+    <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
+  </svg>
+);
+
+/** Small 24×24 previews for the properties panel options. */
+export const Glyph = ({ children }: { children: React.ReactNode }) => (
+  <svg {...base} width={20} height={20}>
+    {children}
+  </svg>
+);

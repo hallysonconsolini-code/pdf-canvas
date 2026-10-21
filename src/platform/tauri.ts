@@ -97,7 +97,7 @@ export async function backupSidecar(pdfPath: string): Promise<string | null> {
 
 // ---- app menu and quitting -------------------------------------------------
 
-export type MenuAction = "open" | "undo" | "redo";
+export type MenuAction = "open" | "undo" | "redo" | "select-all";
 
 export function onMenu(handler: (action: MenuAction) => void): () => void {
   if (!isTauri) return () => {};

@@ -66,9 +66,13 @@ export default function App() {
         openDialog();
         return;
       }
-      // Inside a text field, undo/redo edit the text instead.
+      // Inside a text field, these edit the text instead.
       if (isTyping(document.activeElement)) {
-        document.execCommand(action);
+        document.execCommand(action === "select-all" ? "selectAll" : action);
+        return;
+      }
+      if (action === "select-all") {
+        window.dispatchEvent(new CustomEvent("pdf-canvas:select-all"));
         return;
       }
       const store = sessionRef.current?.store;
@@ -108,6 +112,7 @@ export default function App() {
       const key = e.key.toLowerCase();
       if (key === "o") runMenu("open");
       else if (key === "z") runMenu(e.shiftKey ? "redo" : "undo");
+      else if (key === "a" && !isTyping(e.target)) runMenu("select-all");
       else return;
       e.preventDefault();
     };

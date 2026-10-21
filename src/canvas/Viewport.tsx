@@ -1,17 +1,20 @@
 import { useEffect, useImperativeHandle, useRef, type Ref } from "react";
 import type { AnnotationStore } from "../model/document";
 import { Selection } from "../model/selection";
-import type { SidecarFile, ToolId } from "../model/types";
+import type { Annotation, ItemStyle, SidecarFile, ToolId } from "../model/types";
 import { PAGE_GAP, pageAtY } from "../pdf/layout";
 import type { PdfDocument } from "../pdf/loader";
 import { PageRenderer } from "../pdf/pageRenderer";
 import { attachTools } from "../tools/controller";
-import { selectedItems } from "../tools/lasso";
+import { duplicate, selectedItems } from "../tools/lasso";
+import { placeOnPage } from "../tools/place";
 import { attachTextHighlight } from "../tools/textHighlight";
-import type { ToolPrefs } from "../tools/Tool";
+import type { ToolContext } from "../tools/Tool";
+import type { HighlighterStyle } from "../ui/useItemStyle";
 import { AnnotationRenderer } from "./annotationRenderer";
 import { Camera } from "./camera";
-import { union } from "./geometry";
+import { applyStyle } from "./applyStyle";
+import { transformAnnotation, union } from "./geometry";
 import { NoteEditor } from "./noteEditor";
 import { attachNavigation } from "./input";
 
@@ -31,6 +34,16 @@ export interface ViewportHandle {
   deleteSelection(): boolean;
   /** Clears the selection. Returns false if nothing was selected. */
   clearSelection(): boolean;
+  selected(): Annotation[];
+  selectAll(): void;
+  /** Duplicates the selection, slightly offset (⌘D). */
+  duplicateSelection(): void;
+  /** Moves the selection by screen pixels. Returns false if nothing was selected. */
+  nudge(dx: number, dy: number): boolean;
+  /** Adds copied items, centred in the view, and selects them. */
+  paste(items: Annotation[]): void;
+  /** Applies a style change to the selected items (one undo step). */
+  styleSelection(patch: Partial<ItemStyle>): void;
 }
 
 interface Props {
@@ -38,12 +51,15 @@ interface Props {
   store: AnnotationStore;
   /** Active tool; "pan" while Space is held. */
   tool: ToolId;
-  prefs(tool: ToolId): ToolPrefs;
+  style: ItemStyle;
+  highlighter: HighlighterStyle;
+  /** A shape or text was just created. */
+  onCreated(item: Annotation): void;
   /** Reading position to restore on open. */
   initialView: SidecarFile["view"] | null;
   onStatus(status: ViewStatus): void;
   onViewChange(): void;
-  onSelectionChange(count: number): void;
+  onSelectionChange(ids: string[]): void;
   ref?: Ref<ViewportHandle>;
 }
 
@@ -51,14 +67,16 @@ interface Props {
 const FIT_MAX_WIDTH = 960;
 const FIT_PADDING = 48;
 
-export function Viewport({ doc, store, tool, prefs, initialView, onStatus, onViewChange, onSelectionChange, ref }: Props) {
+export function Viewport(props: Props) {
+  const { doc, store, tool, initialView, ref } = props;
   const rootRef = useRef<HTMLDivElement>(null);
   const pagesRef = useRef<HTMLDivElement>(null);
   const cameraRef = useRef<Camera | null>(null);
   const selection = useRef(new Selection()).current;
   // Latest props for long-lived event handlers.
-  const live = useRef({ tool, prefs, onStatus, onViewChange, onSelectionChange });
-  live.current = { tool, prefs, onStatus, onViewChange, onSelectionChange };
+  const live = useRef(props);
+  live.current = props;
+  const contextRef = useRef<ToolContext | null>(null);
 
   // Switching tools drops the selection and finishes any note being edited.
   useEffect(() => {
@@ -107,6 +125,47 @@ export function Viewport({ doc, store, tool, prefs, initialView, onStatus, onVie
         selection.clear();
         return true;
       },
+      selected() {
+        return selectedItems({ selection, store });
+      },
+      selectAll() {
+        selection.set(store.all().map((a) => a.id));
+      },
+      duplicateSelection() {
+        const items = selectedItems({ selection, store });
+        if (!items.length) return;
+        const copies = duplicate(items, 10, 10);
+        store.add(copies);
+        selection.set(copies.map((a) => a.id));
+      },
+      nudge(dx, dy) {
+        const items = selectedItems({ selection, store });
+        if (!items.length) return false;
+        const z = cam().zoom;
+        const ctx = contextRef.current!;
+        const moved = items.map((a) => placeOnPage(ctx, transformAnnotation(a, (p) => ({ x: p.x + dx / z, y: p.y + dy / z }))));
+        store.update(items, moved);
+        return true;
+      },
+      paste(items) {
+        if (!items.length) return;
+        const c = cam();
+        const box = union(items.map((a) => a.bbox));
+        const view = c.visibleRect();
+        const dx = view.x + view.w / 2 - (box.x + box.w / 2);
+        const dy = view.y + view.h / 2 - (box.y + box.h / 2);
+        const ctx = contextRef.current!;
+        const copies = duplicate(items, dx, dy).map((a) => placeOnPage(ctx, a));
+        store.add(copies);
+        selection.set(copies.map((a) => a.id));
+      },
+      styleSelection(patch) {
+        const items = selectedItems({ selection, store });
+        const changed = items.map((a) => applyStyle(a, patch));
+        const before = items.filter((_, i) => changed[i] !== items[i]);
+        const after = changed.filter((a, i) => a !== items[i]);
+        if (after.length) store.update(before, after);
+      },
     };
   }, [doc, store, selection]);
 
@@ -129,7 +188,7 @@ export function Viewport({ doc, store, tool, prefs, initialView, onStatus, onVie
       const items = selectedItems({ selection, store });
       if (items.length !== selection.size) selection.set(items.map((a) => a.id));
       annotations.setSelectionBox(items.length ? union(items.map((a) => a.bbox)) : null);
-      live.current.onSelectionChange(items.length);
+      live.current.onSelectionChange(items.map((a) => a.id));
     };
     const stopSelection = selection.subscribe(syncSelection);
     const stopStoreSync = store.subscribe(syncSelection);
@@ -199,15 +258,21 @@ export function Viewport({ doc, store, tool, prefs, initialView, onStatus, onVie
 
     const panning = () => live.current.tool === "pan";
     const detachNav = attachNavigation(root, camera, panning);
-    const toolContext = {
+    const toolContext: ToolContext = {
       camera,
       store,
       renderer: annotations,
       layout: doc.layout,
       selection,
       editor,
-      prefs: (t: ToolId) => live.current.prefs(t),
+      style: () => live.current.style,
+      highlighter: () => live.current.highlighter,
+      created: (item) => live.current.onCreated(item),
     };
+    contextRef.current = toolContext;
+    // Redraw text once the hand-drawn font has loaded.
+    const onFonts = () => annotations.redraw();
+    document.fonts.addEventListener("loadingdone", onFonts);
     const detachTools = attachTools(root, toolContext, () => (panning() ? null : live.current.tool));
     const detachTextHighlight = attachTextHighlight(root, toolContext, () => live.current.tool === "text-highlight");
 
@@ -220,6 +285,7 @@ export function Viewport({ doc, store, tool, prefs, initialView, onStatus, onVie
       detachNav();
       detachTools();
       detachTextHighlight();
+      document.fonts.removeEventListener("loadingdone", onFonts);
       editor.commit();
       stopSelection();
       stopStoreSync();

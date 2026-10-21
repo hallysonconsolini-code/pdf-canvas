@@ -15,6 +15,8 @@ export interface Session {
 }
 
 export async function openSession(doc: PdfDocument, onSave: (state: SaveState) => void): Promise<Session> {
+  // Text is measured with the hand-drawn font: load it before anything.
+  await Promise.all([document.fonts.load('16px "Excalifont"'), document.fonts.load('16px "Excalifont"', "ãçé")]).catch(() => {});
   const loaded = await loadAnnotations(doc);
   const store = new AnnotationStore(loaded.annotations);
   const session: Session = {

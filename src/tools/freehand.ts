@@ -8,7 +8,8 @@ import type { Tool, ToolContext, ToolGesture, ToolPoint } from "./Tool";
 export function freehandTool(type: "pen" | "highlighter"): Tool {
   return {
     begin(ctx: ToolContext, start: ToolPoint): ToolGesture {
-      const { color, width } = ctx.prefs(type);
+      const { color, width } = type === "pen" ? ctx.style() : ctx.highlighter();
+      const opacity = type === "pen" ? ctx.style().opacity : 100;
       const points: number[] = [round(start.x), round(start.y), round(start.pressure)];
       // Live copy shown on the wet layer while drawing.
       const stroke: StrokeAnnotation = {
@@ -20,6 +21,7 @@ export function freehandTool(type: "pen" | "highlighter"): Tool {
         color,
         width,
         points,
+        opacity,
       };
       let straight = false;
       // Ignore jitter smaller than a quarter of a screen pixel.
@@ -52,6 +54,7 @@ export function freehandTool(type: "pen" | "highlighter"): Tool {
             color,
             width,
             points: stroke.points,
+            ...(opacity !== 100 ? { opacity } : {}),
             page: pageForRect(ctx.layout.pages, bbox),
             bbox,
             ...(straight ? { straight: true } : {}),

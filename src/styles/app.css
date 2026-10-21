@@ -1,3 +1,18 @@
+/* Excalifont (SIL OFL 1.1), Excalidraw's hand-drawn font. */
+@font-face {
+  font-family: "Excalifont";
+  src: url("../assets/fonts/Excalifont-Latin.woff2") format("woff2");
+  unicode-range: U+20-7E, U+A0-FF, U+131, U+152-153, U+2BC, U+2C6, U+2DA, U+2DC, U+2013-2014, U+2018-201E, U+2020-2026, U+2030, U+2039-203A, U+20AC, U+2122, U+2212;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "Excalifont";
+  src: url("../assets/fonts/Excalifont-LatinExt.woff2") format("woff2");
+  unicode-range: U+100-130, U+132-137, U+139-149, U+14C-151, U+154-17E, U+192, U+1FC-1FF, U+218-21B, U+237, U+1E80-1E85, U+1EF2-1EF3, U+2113;
+  font-display: block;
+}
+
 *,
 *::before,
 *::after {
@@ -301,14 +316,7 @@ kbd {
   transform: translateX(-50%);
 }
 
-/* Color/width options sit under the tools so the tool buttons never move. */
-.toolbar-options {
-  top: calc(var(--space-3) + 40px + var(--space-2));
-}
 
-.toolbar-options [data-tip]:hover::after {
-  top: calc(100% + var(--space-2));
-}
 
 .statusbar {
   right: var(--space-3);
@@ -525,21 +533,126 @@ kbd {
   line-height: 1;
 }
 
-/* ---- Text note editor (laid over the canvas while typing) ---- */
+/* ---- Text editor (laid over the canvas while typing) ---- */
 
 .note-editor {
   position: absolute;
   margin: 0;
+  padding: 0;
   border: 0;
-  border-radius: 2px;
-  outline: 1.5px solid var(--accent);
-  outline-offset: 0;
-  background: rgba(255, 255, 255, 0.92);
+  outline: none;
+  background: transparent;
   resize: none;
   overflow: hidden;
-  white-space: pre-wrap;
-  overflow-wrap: break-word;
+  white-space: pre;
   user-select: text;
   -webkit-user-select: text;
   z-index: 3;
+}
+
+/* ---- Tool digits and lock ---- */
+
+.tool-digit {
+  position: absolute;
+  right: 3px;
+  bottom: 1px;
+  font-size: 9px;
+  line-height: 1;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.lock-btn[aria-pressed="true"] {
+  color: var(--accent);
+}
+
+/* ---- Properties panel (Excalidraw style, docked left) ---- */
+
+.properties {
+  position: absolute;
+  top: calc(var(--space-3) + 48px);
+  left: var(--space-3);
+  width: 212px;
+  max-height: calc(100% - 120px);
+  overflow-y: auto;
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  background: var(--surface);
+  backdrop-filter: blur(20px) saturate(1.6);
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--float-shadow);
+  z-index: 5;
+}
+
+.prop-section h3 {
+  margin: 0 0 var(--space-2);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.properties .swatches {
+  flex-wrap: wrap;
+}
+
+.properties .swatch {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+}
+
+.swatch-transparent {
+  background:
+    linear-gradient(45deg, transparent 46%, #e03131 46%, #e03131 54%, transparent 54%),
+    repeating-conic-gradient(#e9ecef 0 25%, #ffffff 0 50%) 0 0 / 8px 8px;
+}
+
+.options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.option {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.option:hover {
+  background: var(--surface-active);
+}
+
+.option[aria-checked="true"] {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.font-glyph {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.properties .segmented {
+  display: inline-flex;
+}
+
+.opacity {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.properties [data-tip]:hover::after {
+  top: calc(100% + var(--space-1));
 }

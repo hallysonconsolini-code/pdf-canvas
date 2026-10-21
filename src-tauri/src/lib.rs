@@ -49,6 +49,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
     // Undo/redo are app actions (annotations), not the web view's text undo.
     let undo = MenuItemBuilder::with_id("undo", "Desfazer").accelerator("CmdOrCtrl+Z").build(app)?;
     let redo = MenuItemBuilder::with_id("redo", "Refazer").accelerator("CmdOrCtrl+Shift+Z").build(app)?;
+    let select_all = MenuItemBuilder::with_id("select-all", "Selecionar tudo").accelerator("CmdOrCtrl+A").build(app)?;
     let edit = SubmenuBuilder::new(app, "Editar")
         .item(&undo)
         .item(&redo)
@@ -56,7 +57,7 @@ fn build_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
         .cut()
         .copy()
         .paste()
-        .select_all()
+        .item(&select_all)
         .build()?;
 
     let window = SubmenuBuilder::new(app, "Janela").minimize().fullscreen().build()?;

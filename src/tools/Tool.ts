@@ -1,15 +1,11 @@
 import type { AnnotationRenderer } from "../canvas/annotationRenderer";
-import type { NoteEditor } from "../canvas/noteEditor";
 import type { Camera } from "../canvas/camera";
+import type { NoteEditor } from "../canvas/noteEditor";
 import type { AnnotationStore } from "../model/document";
 import type { Selection } from "../model/selection";
-import type { ColorId, ToolId, WidthId } from "../model/types";
+import type { Annotation, ItemStyle } from "../model/types";
 import type { DocumentLayout } from "../pdf/layout";
-
-export interface ToolPrefs {
-  color: ColorId;
-  width: WidthId;
-}
+import type { HighlighterStyle } from "../ui/useItemStyle";
 
 export interface ToolContext {
   camera: Camera;
@@ -18,7 +14,11 @@ export interface ToolContext {
   layout: DocumentLayout;
   selection: Selection;
   editor: NoteEditor;
-  prefs(tool: ToolId): ToolPrefs;
+  /** Style for new items. */
+  style(): ItemStyle;
+  highlighter(): HighlighterStyle;
+  /** A shape or text was just created (the app may switch back to Selection). */
+  created(item: Annotation): void;
 }
 
 /** World-space pointer sample. */
@@ -27,6 +27,7 @@ export interface ToolPoint {
   y: number;
   pressure: number;
   shift: boolean;
+  alt: boolean;
 }
 
 /** One pointer gesture (down -> moves -> up). */

@@ -46,7 +46,7 @@ function highlightsFromSelection(root: HTMLElement, ctx: ToolContext, selection:
     }
   }
 
-  const { color } = ctx.prefs("text-highlight");
+  const { color } = ctx.highlighter();
   const text = selection.toString().trim();
   return [...byPage.entries()].map(([page, rects]) => {
     const lines = mergeLines(rects).map((r) => ({ x: round(r.x), y: round(r.y), w: round(r.w), h: round(r.h) }));

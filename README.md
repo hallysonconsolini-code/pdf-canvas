@@ -42,32 +42,58 @@ Modo de desenvolvimento só da interface, no navegador (sem APIs do Tauri):
 coloque um PDF em `public/dev-samples/` e abra
 `http://localhost:1420/?pdf=/dev-samples/arquivo.pdf` com `npm run dev` rodando.
 
+## Estilo Excalidraw
+
+Desenho e escrita seguem o Excalidraw:
+
+- Formas com traço desenhado à mão (rough.js) e texto na fonte manuscrita
+  Excalifont. A caneta usa os mesmos parâmetros do desenho livre do Excalidraw.
+- Texto sem caixa: duplo clique em qualquer lugar (com a Seleção) ou T e
+  clique. O texto cresce com o conteúdo; Enter quebra a linha; Esc, ⌘↩ ou
+  clique fora termina. Redimensionar o texto muda o tamanho da fonte.
+- Painel de propriedades à esquerda: cor do traço, fundo, preenchimento
+  (hachura, hachura cruzada, sólido), espessura, estilo do traço, desleixo
+  (arquiteto, artista, cartunista), bordas, fonte, tamanho, alinhamento e
+  opacidade. Vale para o item selecionado e para os próximos itens.
+- Depois de desenhar uma forma ou escrever, o app volta para a Seleção com o
+  item selecionado. O cadeado (Q) mantém a ferramenta ativa.
+
 ## Atalhos
 
 | Ação | Atalho |
 |---|---|
 | Abrir PDF | ⌘O ou arrastar o arquivo para a janela |
 | Mão (pan) | H, ou segurar Espaço |
-| Seleção (laço) | V |
+| Seleção | V ou 1 |
+| Retângulo / Losango / Elipse | R ou 2 / D ou 3 / O ou 4 |
+| Seta / Linha | A ou 5 / L ou 6 |
+| Desenhar (caneta) | P ou 7 |
+| Texto | T ou 8, ou duplo clique com a Seleção |
+| Marca-texto | M ou 9 (segure Shift para linha reta) |
+| Marca-texto no texto do PDF | ⇧M |
+| Borracha | E ou 0, ou a ponta de borracha da caneta da mesa digitalizadora |
 | Selecionar e copiar texto do PDF | S |
-| Caneta | P |
-| Marca-texto | M (segure Shift para linha reta) |
-| Marca-texto no texto | ⇧M (selecione o trecho; o destaque cobre as linhas exatas) |
-| Borracha (apaga o item inteiro) | E, ou a ponta de borracha da caneta da mesa digitalizadora |
-| Nota de texto | T (clique para criar, clique numa nota para editar) |
-| Seta / Retângulo / Elipse | A / R / O (Shift: 15°, quadrado, círculo) |
+| Manter ferramenta ativa | Q |
+| Selecionar tudo | ⌘A |
+| Copiar / Recortar / Colar itens | ⌘C / ⌘X / ⌘V (colar texto cria um item de texto) |
+| Duplicar | ⌘D, ou Alt + arrastar |
+| Mover seleção | Setas (Shift: 10×) |
 | Apagar seleção | Delete |
-| Limpar seleção / voltar para a Mão | Esc |
+| Limpar seleção / voltar para a Seleção | Esc |
 | Desfazer / Refazer | ⌘Z / ⌘⇧Z |
-| Mover a vista | Dois dedos no trackpad, setas, Page Up/Down |
+| Mover a vista | Dois dedos no trackpad, Page Up/Down |
 | Zoom | Pinça, ⌘ + rolagem, ⌘+ / ⌘− |
 | Ajustar à largura | ⌘0 ou clique no valor do zoom |
 | Primeira / última página | Home / End |
 
-Com a Seleção (V): clique num item para selecionar (Shift soma), arraste no
-vazio para desenhar o laço, arraste a seleção para mover, puxe os cantos para
-redimensionar (Shift mantém a proporção). Duplo clique numa nota edita o texto.
-Notas terminam com Esc, ⌘↩ ou clique fora.
+Formas: Shift faz quadrado/círculo ou ângulos de 15°; Alt desenha a partir do
+centro. Na Seleção: clique seleciona (Shift soma), arrastar no vazio desenha o
+laço, as 8 alças redimensionam (Shift mantém a proporção).
+
+## Fontes
+
+Excalifont (SIL Open Font License 1.1), do Excalidraw. Veja
+`src/assets/fonts/README.md`.
 
 ## Arquivos de anotação
 
@@ -79,6 +105,8 @@ Notas terminam com Esc, ⌘↩ ou clique fora.
   `~/Library/Application Support/com.hallysonconsolini.pdf-canvas/annotations/`.
 - Abrir um PDF sem anotar não cria arquivo nenhum; a posição de leitura fica
   guardada no próprio app.
+- Arquivos salvos antes do estilo Excalidraw (versão 1) são convertidos ao
+  abrir: notas viram texto livre com as mesmas quebras de linha.
 - Se o arquivo de anotações for de outra versão do PDF (ou estiver danificado),
   o app pergunta antes e guarda uma cópia `*.backup-<data>.json`; nada é apagado.
 - A cor e a espessura de cada ferramenta são lembradas.
@@ -97,5 +125,8 @@ Notas terminam com Esc, ⌘↩ ou clique fora.
   inversíveis, ilimitado na sessão).
 - Gravação atômica em Rust (`src-tauri/src/sidecar.rs`): grava num arquivo
   temporário e renomeia, então uma queda nunca deixa o JSON pela metade.
+- `src/canvas/geometry.ts`: desenho, colisão e transformação de todos os tipos;
+  formas via rough.js com as mesmas opções do Excalidraw e semente fixa por
+  item (o rabisco não muda ao redesenhar).
 - O PDF.js vem do build `legacy`, porque o WebView do macOS ainda não tem
   algumas APIs JS novas usadas pelo build moderno.
