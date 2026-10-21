@@ -1,18 +1,37 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Viewport, type ViewStatus, type ViewportHandle } from "../canvas/Viewport";
-import type { PdfDocument } from "../pdf/loader";
+import type { ToolId } from "../model/types";
+import type { SaveState } from "../persistence/autosave";
+import type { Session } from "../session";
 import { StatusBar } from "./StatusBar";
-import { Toolbar, type Phase1Tool } from "./Toolbar";
+import { Toolbar } from "./Toolbar";
+import { useToolPrefs } from "./useToolPrefs";
 
 interface Props {
-  doc: PdfDocument;
+  session: Session;
+  save: SaveState;
 }
 
-export function DocumentView({ doc }: Props) {
+const TOOL_KEYS: Record<string, ToolId> = {
+  h: "pan",
+  v: "select",
+  p: "pen",
+  m: "highlighter",
+  e: "eraser",
+};
+
+export function DocumentView({ session, save }: Props) {
+  const { doc, store } = session;
   const viewport = useRef<ViewportHandle>(null);
-  const [tool, setTool] = useState<Phase1Tool>("pan");
+  const [tool, setTool] = useState<ToolId>("pan");
   const [spaceHeld, setSpaceHeld] = useState(false);
   const [status, setStatus] = useState<ViewStatus>({ page: 0, zoom: 1 });
+  const prefs = useToolPrefs();
+
+  // Autosave reads the reading position from the viewport.
+  useEffect(() => {
+    session.readView = () => viewport.current?.view() ?? session.initialView ?? fallbackView();
+  }, [session]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -26,15 +45,14 @@ export function DocumentView({ doc }: Props) {
       if (mod && e.key === "0") return run(e, () => v.fitWidth());
       if (mod || e.altKey) return;
 
+      const toolKey = TOOL_KEYS[e.key.toLowerCase()];
+      if (toolKey && !e.shiftKey) return run(e, () => setTool(toolKey));
+
       switch (e.key) {
         case " ":
           return run(e, () => setSpaceHeld(true));
-        case "h":
-        case "H":
+        case "Escape":
           return run(e, () => setTool("pan"));
-        case "v":
-        case "V":
-          return run(e, () => setTool("select"));
         case "ArrowDown":
           return run(e, () => v.scrollBy(0, 64));
         case "ArrowUp":
@@ -68,15 +86,26 @@ export function DocumentView({ doc }: Props) {
   }, [doc]);
 
   const onStatus = useCallback((s: ViewStatus) => setStatus(s), []);
+  const onViewChange = useCallback(() => session.autosave.viewChanged(), [session]);
 
   return (
     <div className="document">
-      <Viewport ref={viewport} doc={doc} panMode={tool === "pan" || spaceHeld} onStatus={onStatus} />
-      <Toolbar tool={tool} onTool={setTool} />
+      <Viewport
+        ref={viewport}
+        doc={doc}
+        store={store}
+        tool={spaceHeld ? "pan" : tool}
+        prefs={prefs.get}
+        initialView={session.initialView}
+        onStatus={onStatus}
+        onViewChange={onViewChange}
+      />
+      <Toolbar tool={tool} onTool={setTool} prefs={prefs.get(tool)} onPrefs={(p) => prefs.set(tool, p)} />
       <StatusBar
         page={status.page}
         pageCount={doc.pages.length}
         zoom={status.zoom}
+        save={save}
         onGoToPage={(i) => viewport.current?.goToPage(i)}
         onZoomBy={(f) => viewport.current?.zoomBy(f)}
         onFitWidth={() => viewport.current?.fitWidth()}
@@ -85,11 +114,15 @@ export function DocumentView({ doc }: Props) {
   );
 }
 
+function fallbackView() {
+  return { camera: { x: 0, y: 0, zoom: 1 }, lastPage: 0 };
+}
+
 function run(e: KeyboardEvent, action: () => void): void {
   e.preventDefault();
   action();
 }
 
-function isTyping(target: EventTarget | null): boolean {
+export function isTyping(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
 }
