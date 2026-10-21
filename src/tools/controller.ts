@@ -1,12 +1,20 @@
 import type { ToolId } from "../model/types";
 import { eraserTool } from "./eraser";
 import { freehandTool } from "./freehand";
+import { lassoTool } from "./lasso";
+import { shapeTool } from "./shapes";
+import { editNote, textTool } from "./text";
 import type { Tool, ToolContext, ToolGesture, ToolPoint } from "./Tool";
 
 const TOOLS: Partial<Record<ToolId, Tool>> = {
   pen: freehandTool("pen"),
   highlighter: freehandTool("highlighter"),
   eraser: eraserTool,
+  text: textTool,
+  arrow: shapeTool("arrow"),
+  rect: shapeTool("rect"),
+  ellipse: shapeTool("ellipse"),
+  lasso: lassoTool,
 };
 
 /**
@@ -26,7 +34,7 @@ export function attachTools(el: HTMLElement, ctx: ToolContext, activeTool: () =>
   };
 
   const onDown = (e: PointerEvent) => {
-    if (gesture) return;
+    if (gesture || fromEditor(e)) return;
     const penEraser = e.pointerType === "pen" && (e.button === 5 || (e.buttons & 32) !== 0);
     if (e.button !== 0 && !penEraser) return;
     const toolId = penEraser ? "eraser" : activeTool();
@@ -55,12 +63,23 @@ export function attachTools(el: HTMLElement, ctx: ToolContext, activeTool: () =>
   const onUp = (e: PointerEvent) => finish(e, false);
   const onCancel = (e: PointerEvent) => finish(e, true);
 
+  // Double-click a note with the selection tool to edit it.
+  const onDoubleClick = (e: MouseEvent) => {
+    if (activeTool() !== "lasso" || fromEditor(e)) return;
+    const r = el.getBoundingClientRect();
+    const p = ctx.camera.screenToWorld(e.clientX - r.left, e.clientY - r.top);
+    const note = ctx.renderer.hitTest(p.x, p.y, 2 / ctx.camera.zoom, true).find((a) => a.type === "text");
+    if (note && note.type === "text") editNote(ctx, note, false);
+  };
+
   el.addEventListener("pointerdown", onDown);
   el.addEventListener("pointermove", onMove);
   el.addEventListener("pointerup", onUp);
   el.addEventListener("pointercancel", onCancel);
+  el.addEventListener("dblclick", onDoubleClick);
   return () => {
     gesture?.cancel();
+    el.removeEventListener("dblclick", onDoubleClick);
     el.removeEventListener("pointerdown", onDown);
     el.removeEventListener("pointermove", onMove);
     el.removeEventListener("pointerup", onUp);
@@ -75,4 +94,8 @@ function capture(el: HTMLElement, pointerId: number): void {
   } catch {
     // Keep going without capture.
   }
+}
+
+function fromEditor(e: Event): boolean {
+  return e.target instanceof Element && e.target.closest(".note-editor") !== null;
 }

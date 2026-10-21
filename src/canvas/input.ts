@@ -63,7 +63,7 @@ export function attachNavigation(
 
   const onPointerDown = (e: PointerEvent) => {
     const pan = e.button === 1 || (e.button === 0 && isPanMode());
-    if (!pan) return;
+    if (!pan || (e.target instanceof Element && e.target.closest(".note-editor"))) return;
     e.preventDefault();
     capture(el, e.pointerId);
     drag = { id: e.pointerId, x: e.clientX, y: e.clientY };

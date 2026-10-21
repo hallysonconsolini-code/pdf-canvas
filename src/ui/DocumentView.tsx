@@ -14,10 +14,15 @@ interface Props {
 
 const TOOL_KEYS: Record<string, ToolId> = {
   h: "pan",
-  v: "select",
+  v: "lasso",
+  s: "select",
   p: "pen",
   m: "highlighter",
   e: "eraser",
+  t: "text",
+  a: "arrow",
+  r: "rect",
+  o: "ellipse",
 };
 
 export function DocumentView({ session, save }: Props) {
@@ -45,14 +50,20 @@ export function DocumentView({ session, save }: Props) {
       if (mod && e.key === "0") return run(e, () => v.fitWidth());
       if (mod || e.altKey) return;
 
+      if (e.shiftKey && e.key.toLowerCase() === "m") return run(e, () => setTool("text-highlight"));
       const toolKey = TOOL_KEYS[e.key.toLowerCase()];
       if (toolKey && !e.shiftKey) return run(e, () => setTool(toolKey));
 
       switch (e.key) {
         case " ":
           return run(e, () => setSpaceHeld(true));
+        case "Backspace":
+        case "Delete":
+          return run(e, () => v.deleteSelection());
         case "Escape":
-          return run(e, () => setTool("pan"));
+          return run(e, () => {
+            if (!v.clearSelection()) setTool("pan");
+          });
         case "ArrowDown":
           return run(e, () => v.scrollBy(0, 64));
         case "ArrowUp":
@@ -99,6 +110,7 @@ export function DocumentView({ session, save }: Props) {
         initialView={session.initialView}
         onStatus={onStatus}
         onViewChange={onViewChange}
+        onSelectionChange={noop}
       />
       <Toolbar tool={tool} onTool={setTool} prefs={prefs.get(tool)} onPrefs={(p) => prefs.set(tool, p)} />
       <StatusBar
@@ -113,6 +125,8 @@ export function DocumentView({ session, save }: Props) {
     </div>
   );
 }
+
+function noop() {}
 
 function fallbackView() {
   return { camera: { x: 0, y: 0, zoom: 1 }, lastPage: 0 };

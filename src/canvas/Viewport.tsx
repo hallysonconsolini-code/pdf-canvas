@@ -1,13 +1,18 @@
 import { useEffect, useImperativeHandle, useRef, type Ref } from "react";
 import type { AnnotationStore } from "../model/document";
+import { Selection } from "../model/selection";
 import type { SidecarFile, ToolId } from "../model/types";
 import { PAGE_GAP, pageAtY } from "../pdf/layout";
 import type { PdfDocument } from "../pdf/loader";
 import { PageRenderer } from "../pdf/pageRenderer";
 import { attachTools } from "../tools/controller";
+import { selectedItems } from "../tools/lasso";
+import { attachTextHighlight } from "../tools/textHighlight";
 import type { ToolPrefs } from "../tools/Tool";
 import { AnnotationRenderer } from "./annotationRenderer";
 import { Camera } from "./camera";
+import { union } from "./geometry";
+import { NoteEditor } from "./noteEditor";
 import { attachNavigation } from "./input";
 
 export interface ViewStatus {
@@ -22,6 +27,10 @@ export interface ViewportHandle {
   scrollBy(dx: number, dy: number): void;
   /** Current reading position, for saving. */
   view(): SidecarFile["view"];
+  /** Deletes the selected annotations. Returns false if nothing was selected. */
+  deleteSelection(): boolean;
+  /** Clears the selection. Returns false if nothing was selected. */
+  clearSelection(): boolean;
 }
 
 interface Props {
@@ -34,6 +43,7 @@ interface Props {
   initialView: SidecarFile["view"] | null;
   onStatus(status: ViewStatus): void;
   onViewChange(): void;
+  onSelectionChange(count: number): void;
   ref?: Ref<ViewportHandle>;
 }
 
@@ -41,13 +51,21 @@ interface Props {
 const FIT_MAX_WIDTH = 960;
 const FIT_PADDING = 48;
 
-export function Viewport({ doc, store, tool, prefs, initialView, onStatus, onViewChange, ref }: Props) {
+export function Viewport({ doc, store, tool, prefs, initialView, onStatus, onViewChange, onSelectionChange, ref }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
   const pagesRef = useRef<HTMLDivElement>(null);
   const cameraRef = useRef<Camera | null>(null);
+  const selection = useRef(new Selection()).current;
   // Latest props for long-lived event handlers.
-  const live = useRef({ tool, prefs, onStatus, onViewChange });
-  live.current = { tool, prefs, onStatus, onViewChange };
+  const live = useRef({ tool, prefs, onStatus, onViewChange, onSelectionChange });
+  live.current = { tool, prefs, onStatus, onViewChange, onSelectionChange };
+
+  // Switching tools drops the selection and finishes any note being edited.
+  useEffect(() => {
+    if (tool !== "lasso") selection.clear();
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && active.classList.contains("note-editor")) active.blur();
+  }, [tool, selection]);
 
   useImperativeHandle(ref, () => {
     const cam = () => cameraRef.current!;
@@ -77,8 +95,20 @@ export function Viewport({ doc, store, tool, prefs, initialView, onStatus, onVie
           lastPage: currentPage(c, doc),
         };
       },
+      deleteSelection() {
+        const items = selectedItems({ selection, store });
+        if (!items.length) return false;
+        selection.clear();
+        store.remove(items);
+        return true;
+      },
+      clearSelection() {
+        if (!selection.size) return false;
+        selection.clear();
+        return true;
+      },
     };
-  }, [doc]);
+  }, [doc, store, selection]);
 
   useEffect(() => {
     const root = rootRef.current!;
@@ -92,6 +122,17 @@ export function Viewport({ doc, store, tool, prefs, initialView, onStatus, onVie
 
     const pages = new PageRenderer(doc, camera, pagesLayer);
     const annotations = new AnnotationRenderer(root, camera, store);
+    const editor = new NoteEditor(root, camera);
+
+    // Selection box follows the selected items (and drops deleted ones).
+    const syncSelection = () => {
+      const items = selectedItems({ selection, store });
+      if (items.length !== selection.size) selection.set(items.map((a) => a.id));
+      annotations.setSelectionBox(items.length ? union(items.map((a) => a.bbox)) : null);
+      live.current.onSelectionChange(items.length);
+    };
+    const stopSelection = selection.subscribe(syncSelection);
+    const stopStoreSync = store.subscribe(syncSelection);
     let frame = 0;
     let zoomChanged = false;
     let lastPage = -1;
@@ -101,6 +142,7 @@ export function Viewport({ doc, store, tool, prefs, initialView, onStatus, onVie
       frame = 0;
       pages.update(zoomChanged);
       annotations.redraw();
+      editor.position();
       zoomChanged = false;
       const page = currentPage(camera, doc);
       if (page !== lastPage || camera.zoom !== lastZoom) {
@@ -157,11 +199,17 @@ export function Viewport({ doc, store, tool, prefs, initialView, onStatus, onVie
 
     const panning = () => live.current.tool === "pan";
     const detachNav = attachNavigation(root, camera, panning);
-    const detachTools = attachTools(
-      root,
-      { camera, store, renderer: annotations, layout: doc.layout, prefs: (t) => live.current.prefs(t) },
-      () => (panning() ? null : live.current.tool),
-    );
+    const toolContext = {
+      camera,
+      store,
+      renderer: annotations,
+      layout: doc.layout,
+      selection,
+      editor,
+      prefs: (t: ToolId) => live.current.prefs(t),
+    };
+    const detachTools = attachTools(root, toolContext, () => (panning() ? null : live.current.tool));
+    const detachTextHighlight = attachTextHighlight(root, toolContext, () => live.current.tool === "text-highlight");
 
     return () => {
       cancelAnimationFrame(frame);
@@ -171,13 +219,17 @@ export function Viewport({ doc, store, tool, prefs, initialView, onStatus, onVie
       dprQuery.removeEventListener("change", onDprChange);
       detachNav();
       detachTools();
+      detachTextHighlight();
+      editor.commit();
+      stopSelection();
+      stopStoreSync();
       annotations.destroy();
       pages.destroy();
       cameraRef.current = null;
     };
     // initialView is only read when the document opens.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [doc, store]);
+  }, [doc, store, selection]);
 
   return (
     <div ref={rootRef} className={`viewport tool-${tool}`}>

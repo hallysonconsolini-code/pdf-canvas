@@ -7,6 +7,11 @@ const KEY = "pdf-canvas.toolPrefs";
 const DEFAULTS: Partial<Record<ToolId, ToolPrefs>> = {
   pen: { color: "black", width: "medium" },
   highlighter: { color: "yellow", width: "medium" },
+  "text-highlight": { color: "yellow", width: "medium" },
+  text: { color: "black", width: "medium" },
+  arrow: { color: "red", width: "medium" },
+  rect: { color: "red", width: "medium" },
+  ellipse: { color: "red", width: "medium" },
 };
 const FALLBACK: ToolPrefs = { color: "black", width: "medium" };
 

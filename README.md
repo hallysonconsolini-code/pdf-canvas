@@ -9,7 +9,7 @@ Feito com Tauri 2, React, TypeScript e PDF.js.
 
 - [x] Fase 1: abrir PDF, canvas infinito com pan/zoom, renderização virtualizada
 - [x] Fase 2: caneta, marca-texto, borracha, desfazer/refazer, autosave
-- [ ] Fase 3: notas de texto, formas, seleção por laço, marca-texto no texto
+- [x] Fase 3: notas de texto, formas, seleção por laço, marca-texto no texto
 - [ ] Fase 4: exportar PDF, recentes, miniaturas, build final
 
 ## Requisitos
@@ -48,16 +48,26 @@ coloque um PDF em `public/dev-samples/` e abra
 |---|---|
 | Abrir PDF | ⌘O ou arrastar o arquivo para a janela |
 | Mão (pan) | H, ou segurar Espaço |
-| Selecionar texto | V |
+| Seleção (laço) | V |
+| Selecionar e copiar texto do PDF | S |
 | Caneta | P |
 | Marca-texto | M (segure Shift para linha reta) |
-| Borracha (apaga o traço inteiro) | E, ou a ponta de borracha da caneta da mesa digitalizadora |
-| Voltar para a Mão | Esc |
+| Marca-texto no texto | ⇧M (selecione o trecho; o destaque cobre as linhas exatas) |
+| Borracha (apaga o item inteiro) | E, ou a ponta de borracha da caneta da mesa digitalizadora |
+| Nota de texto | T (clique para criar, clique numa nota para editar) |
+| Seta / Retângulo / Elipse | A / R / O (Shift: 15°, quadrado, círculo) |
+| Apagar seleção | Delete |
+| Limpar seleção / voltar para a Mão | Esc |
 | Desfazer / Refazer | ⌘Z / ⌘⇧Z |
 | Mover a vista | Dois dedos no trackpad, setas, Page Up/Down |
 | Zoom | Pinça, ⌘ + rolagem, ⌘+ / ⌘− |
 | Ajustar à largura | ⌘0 ou clique no valor do zoom |
 | Primeira / última página | Home / End |
+
+Com a Seleção (V): clique num item para selecionar (Shift soma), arraste no
+vazio para desenhar o laço, arraste a seleção para mover, puxe os cantos para
+redimensionar (Shift mantém a proporção). Duplo clique numa nota edita o texto.
+Notas terminam com Esc, ⌘↩ ou clique fora.
 
 ## Arquivos de anotação
 

@@ -34,6 +34,7 @@ export default function App() {
       const data = isTauri ? await readFileBytes(path) : await fetchDevFile(path);
       const doc = await loadPdf(path, data);
       const previous = sessionRef.current;
+      finishTyping();
       if (previous) await closeSession(previous);
       const next = await openSession(doc, setSave);
       sessionRef.current = next;
@@ -82,6 +83,7 @@ export default function App() {
   useEffect(
     () =>
       onQuitRequested(async () => {
+        finishTyping();
         await sessionRef.current?.autosave.flush();
       }),
     [],
@@ -137,4 +139,10 @@ async function fetchDevFile(url: string): Promise<Uint8Array> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return new Uint8Array(await res.arrayBuffer());
+}
+
+/** Commits a text note being edited (its editor saves on blur). */
+function finishTyping(): void {
+  const active = document.activeElement;
+  if (active instanceof HTMLElement && active.classList.contains("note-editor")) active.blur();
 }

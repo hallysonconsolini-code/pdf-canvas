@@ -69,3 +69,38 @@ export const EraserIcon = () => (
     <path d="m5 11 9 9" />
   </svg>
 );
+
+export const LassoIcon = () => (
+  <svg {...base}>
+    <path d="M7 22a5 5 0 0 1-2-4" />
+    <path d="M3.3 14A6.8 6.8 0 0 1 2 10c0-4.4 4.5-8 10-8s10 3.6 10 8-4.5 8-10 8a12 12 0 0 1-5-1" />
+    <path d="M5 18a2 2 0 1 0 0-4 2 2 0 0 0 0 4z" />
+  </svg>
+);
+
+export const TextIcon = () => (
+  <svg {...base}>
+    <path d="M4 7V5h16v2" />
+    <path d="M12 5v14" />
+    <path d="M9 19h6" />
+  </svg>
+);
+
+export const ArrowIcon = () => (
+  <svg {...base}>
+    <path d="M5 19 19 5" />
+    <path d="M10 5h9v9" />
+  </svg>
+);
+
+export const RectIcon = () => (
+  <svg {...base}>
+    <rect x="4" y="5" width="16" height="14" rx="1.5" />
+  </svg>
+);
+
+export const EllipseIcon = () => (
+  <svg {...base}>
+    <ellipse cx="12" cy="12" rx="9" ry="7" />
+  </svg>
+);
