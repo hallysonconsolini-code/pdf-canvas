@@ -65,7 +65,7 @@ export function attachNavigation(
     const pan = e.button === 1 || (e.button === 0 && isPanMode());
     if (!pan) return;
     e.preventDefault();
-    el.setPointerCapture(e.pointerId);
+    capture(el, e.pointerId);
     drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
     el.classList.add("is-panning");
   };
@@ -100,4 +100,13 @@ export function attachNavigation(
     el.removeEventListener("pointerup", onPointerUp);
     el.removeEventListener("pointercancel", onPointerUp);
   };
+}
+
+/** Pointer capture can throw for pointers the browser no longer tracks. */
+function capture(el: HTMLElement, pointerId: number): void {
+  try {
+    el.setPointerCapture(pointerId);
+  } catch {
+    // Keep going without capture.
+  }
 }

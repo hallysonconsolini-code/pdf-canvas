@@ -1,7 +1,12 @@
 import { useEffect, useImperativeHandle, useRef, type Ref } from "react";
+import type { AnnotationStore } from "../model/document";
+import type { SidecarFile, ToolId } from "../model/types";
 import { PAGE_GAP, pageAtY } from "../pdf/layout";
 import type { PdfDocument } from "../pdf/loader";
 import { PageRenderer } from "../pdf/pageRenderer";
+import { attachTools } from "../tools/controller";
+import type { ToolPrefs } from "../tools/Tool";
+import { AnnotationRenderer } from "./annotationRenderer";
 import { Camera } from "./camera";
 import { attachNavigation } from "./input";
 
@@ -12,16 +17,23 @@ export interface ViewStatus {
 
 export interface ViewportHandle {
   zoomBy(factor: number): void;
-  setZoom(zoom: number): void;
   fitWidth(): void;
   goToPage(index: number): void;
   scrollBy(dx: number, dy: number): void;
+  /** Current reading position, for saving. */
+  view(): SidecarFile["view"];
 }
 
 interface Props {
   doc: PdfDocument;
-  panMode: boolean;
+  store: AnnotationStore;
+  /** Active tool; "pan" while Space is held. */
+  tool: ToolId;
+  prefs(tool: ToolId): ToolPrefs;
+  /** Reading position to restore on open. */
+  initialView: SidecarFile["view"] | null;
   onStatus(status: ViewStatus): void;
+  onViewChange(): void;
   ref?: Ref<ViewportHandle>;
 }
 
@@ -29,14 +41,13 @@ interface Props {
 const FIT_MAX_WIDTH = 960;
 const FIT_PADDING = 48;
 
-export function Viewport({ doc, panMode, onStatus, ref }: Props) {
+export function Viewport({ doc, store, tool, prefs, initialView, onStatus, onViewChange, ref }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
   const pagesRef = useRef<HTMLDivElement>(null);
   const cameraRef = useRef<Camera | null>(null);
-  const panModeRef = useRef(panMode);
-  const onStatusRef = useRef(onStatus);
-  panModeRef.current = panMode;
-  onStatusRef.current = onStatus;
+  // Latest props for long-lived event handlers.
+  const live = useRef({ tool, prefs, onStatus, onViewChange });
+  live.current = { tool, prefs, onStatus, onViewChange };
 
   useImperativeHandle(ref, () => {
     const cam = () => cameraRef.current!;
@@ -45,10 +56,6 @@ export function Viewport({ doc, panMode, onStatus, ref }: Props) {
       zoomBy(factor) {
         const c = cam();
         c.zoomAt(c.width / 2, c.height / 2, factor);
-      },
-      setZoom(zoom) {
-        const c = cam();
-        c.zoomAt(c.width / 2, c.height / 2, zoom / c.zoom);
       },
       fitWidth() {
         const c = cam();
@@ -63,6 +70,13 @@ export function Viewport({ doc, panMode, onStatus, ref }: Props) {
       scrollBy(dx, dy) {
         cam().panBy(dx, dy);
       },
+      view() {
+        const c = cam();
+        return {
+          camera: { x: round(c.x), y: round(c.y), zoom: Math.round(c.zoom * 1e4) / 1e4 },
+          lastPage: currentPage(c, doc),
+        };
+      },
     };
   }, [doc]);
 
@@ -76,7 +90,8 @@ export function Viewport({ doc, panMode, onStatus, ref }: Props) {
     // Free space around the pages for scratch notes.
     camera.bounds = { x: b.x - spare, y: b.y - spare / 2, w: b.w + spare * 2, h: b.h + spare };
 
-    const renderer = new PageRenderer(doc, camera, pagesLayer);
+    const pages = new PageRenderer(doc, camera, pagesLayer);
+    const annotations = new AnnotationRenderer(root, camera, store);
     let frame = 0;
     let zoomChanged = false;
     let lastPage = -1;
@@ -84,42 +99,47 @@ export function Viewport({ doc, panMode, onStatus, ref }: Props) {
 
     const draw = () => {
       frame = 0;
-      renderer.update(zoomChanged);
+      pages.update(zoomChanged);
+      annotations.redraw();
       zoomChanged = false;
-      const page = pageAtY(doc.layout.pages, camera.y + camera.height / camera.zoom / 3);
+      const page = currentPage(camera, doc);
       if (page !== lastPage || camera.zoom !== lastZoom) {
         lastPage = page;
         lastZoom = camera.zoom;
-        onStatusRef.current({ page, zoom: camera.zoom });
+        live.current.onStatus({ page, zoom: camera.zoom });
       }
     };
     const unsubscribe = camera.onChange((z) => {
       zoomChanged ||= z;
       if (!frame) frame = requestAnimationFrame(draw);
+      live.current.onViewChange();
     });
 
-    // Keep fitting the first page until the user moves the view: the window
+    // Until the user moves the view, keep the initial framing: the window
     // may still be settling to its final size right after opening.
     let untouched = true;
-    let fitting = false;
-    const fitInitial = () => {
-      fitting = true;
-      fitWidth(camera, doc, -PAGE_GAP);
-      fitting = false;
+    let programmatic = false;
+    const frameInitial = () => {
+      programmatic = true;
+      const c = initialView?.camera;
+      if (c) camera.set(c.x, c.y, c.zoom);
+      else fitWidth(camera, doc, -PAGE_GAP);
+      programmatic = false;
     };
     const stopAutoFit = camera.onChange(() => {
-      if (!fitting) untouched = false;
+      if (!programmatic) untouched = false;
     });
     let sized = false;
     const resize = new ResizeObserver(([entry]) => {
       const { width, height } = entry.contentRect;
       // Keep the horizontal centre in place when the window is resized.
       const shift = sized ? (camera.width - width) / 2 / camera.zoom : 0;
-      fitting = true;
+      programmatic = true;
       camera.setSize(width, height);
       camera.set(camera.x + shift, camera.y);
-      fitting = false;
-      if (!sized || untouched) fitInitial();
+      programmatic = false;
+      annotations.resize();
+      if (!sized || untouched) frameInitial();
       sized = true;
     });
     resize.observe(root);
@@ -130,11 +150,18 @@ export function Viewport({ doc, panMode, onStatus, ref }: Props) {
       dprQuery.removeEventListener("change", onDprChange);
       dprQuery = matchMedia(`(resolution: ${devicePixelRatio}dppx)`);
       dprQuery.addEventListener("change", onDprChange);
-      renderer.invalidate();
+      pages.invalidate();
+      annotations.resize();
     };
     dprQuery.addEventListener("change", onDprChange);
 
-    const detach = attachNavigation(root, camera, () => panModeRef.current);
+    const panning = () => live.current.tool === "pan";
+    const detachNav = attachNavigation(root, camera, panning);
+    const detachTools = attachTools(
+      root,
+      { camera, store, renderer: annotations, layout: doc.layout, prefs: (t) => live.current.prefs(t) },
+      () => (panning() ? null : live.current.tool),
+    );
 
     return () => {
       cancelAnimationFrame(frame);
@@ -142,17 +169,25 @@ export function Viewport({ doc, panMode, onStatus, ref }: Props) {
       stopAutoFit();
       resize.disconnect();
       dprQuery.removeEventListener("change", onDprChange);
-      detach();
-      renderer.destroy();
+      detachNav();
+      detachTools();
+      annotations.destroy();
+      pages.destroy();
       cameraRef.current = null;
     };
-  }, [doc]);
+    // initialView is only read when the document opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doc, store]);
 
   return (
-    <div ref={rootRef} className={`viewport${panMode ? " tool-pan" : " tool-select"}`}>
+    <div ref={rootRef} className={`viewport tool-${tool}`}>
       <div ref={pagesRef} className="pages-layer" />
     </div>
   );
+}
+
+function currentPage(camera: Camera, doc: PdfDocument): number {
+  return pageAtY(doc.layout.pages, camera.y + camera.height / camera.zoom / 3);
 }
 
 function fitWidth(camera: Camera, doc: PdfDocument, topY: number): void {
@@ -163,4 +198,8 @@ function fitWidth(camera: Camera, doc: PdfDocument, topY: number): void {
   // Set zoom first so bounds clamping uses the new scale.
   camera.set(camera.x, camera.y, zoom);
   camera.set(-camera.width / 2 / camera.zoom, topY);
+}
+
+function round(v: number): number {
+  return Math.round(v * 100) / 100;
 }

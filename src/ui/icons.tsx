@@ -47,3 +47,25 @@ export const FileIcon = () => (
     <path d="M14 3v5h5" />
   </svg>
 );
+
+export const PenIcon = () => (
+  <svg {...base}>
+    <path d="M12 20h9" />
+    <path d="M16.38 3.62a2.12 2.12 0 1 1 3 3L7.37 18.64a2 2 0 0 1-.86.5l-2.87.84a.5.5 0 0 1-.62-.62l.84-2.87a2 2 0 0 1 .5-.86z" />
+  </svg>
+);
+
+export const HighlighterIcon = () => (
+  <svg {...base}>
+    <path d="m9 11-6 6v3h9l3-3" />
+    <path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4" />
+  </svg>
+);
+
+export const EraserIcon = () => (
+  <svg {...base}>
+    <path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21" />
+    <path d="M22 21H7" />
+    <path d="m5 11 9 9" />
+  </svg>
+);

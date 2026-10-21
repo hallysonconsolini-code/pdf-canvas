@@ -149,8 +149,33 @@ kbd {
   z-index: 2;
 }
 
-.tool-pan .textLayer {
+/* Text is selectable only with the select tool. */
+.viewport:not(.tool-select) .textLayer {
   pointer-events: none;
+}
+
+.viewport.tool-pen,
+.viewport.tool-highlighter {
+  cursor: crosshair;
+}
+
+.viewport.tool-eraser {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20'%3E%3Ccircle cx='10' cy='10' r='8' fill='white' fill-opacity='0.5' stroke='black' stroke-width='1.25'/%3E%3C/svg%3E") 10 10, cell;
+}
+
+/* Annotation layers cover the viewport in screen pixels. */
+.annotations {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* Opaque tints multiplied over the page: text stays readable underneath. */
+.annotations-highlight,
+.annotations-wet.is-highlighter {
+  mix-blend-mode: multiply;
 }
 
 .tool-select .textLayer {
@@ -190,7 +215,7 @@ kbd {
   transform-origin: 0% 0%;
 }
 
-.tool-pan .textLayer :is(span, br) {
+.viewport:not(.tool-select) .textLayer :is(span, br) {
   cursor: inherit;
 }
 
@@ -376,4 +401,66 @@ kbd {
   font-weight: 500;
   pointer-events: none;
   z-index: 100;
+}
+
+/* ---- Color and width pickers ---- */
+
+.swatches,
+.widths {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.swatch {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--swatch);
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.25);
+}
+
+.swatch[aria-checked="true"] {
+  box-shadow:
+    inset 0 0 0 0.5px rgba(0, 0, 0, 0.25),
+    0 0 0 2px var(--surface-solid),
+    0 0 0 3.5px var(--accent);
+}
+
+.width-btn {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+}
+
+.width-btn:hover {
+  background: var(--surface-hover);
+}
+
+.width-btn[aria-checked="true"] {
+  background: var(--surface-active);
+}
+
+.width-dot {
+  width: var(--dot);
+  height: var(--dot);
+  border-radius: 50%;
+  background: var(--text);
+}
+
+/* ---- Save indicator ---- */
+
+.save-state {
+  position: relative;
+  padding: 0 var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.save-error {
+  color: #d93025;
 }
