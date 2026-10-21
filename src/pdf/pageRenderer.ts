@@ -3,6 +3,7 @@ import type { Camera } from "../canvas/camera";
 import type { Rect } from "../model/types";
 import { intersect, pagesInRange, type PageBox } from "./layout";
 import type { PdfDocument } from "./loader";
+import { registerTextLayer, unregisterTextLayer } from "./textSelection";
 
 /** Largest full-page bitmap (~40 MB). Beyond it, a viewport-sized detail
  *  bitmap covers the visible part of the page at full sharpness. */
@@ -35,6 +36,7 @@ interface Slot {
   detailKey: string;
   detailJob: { key: string; task: RenderTask } | null;
   text: TextLayer | null;
+  textLayer: HTMLDivElement | null;
 }
 
 interface Job {
@@ -158,6 +160,7 @@ export class PageRenderer {
       detailKey: "",
       detailJob: null,
       text: null,
+      textLayer: null,
     };
     this.slots.set(index, slot);
     this.position(slot);
@@ -179,7 +182,13 @@ export class PageRenderer {
       viewport: page.getViewport({ scale: 1 }),
     });
     slot.text = text;
-    text.render().catch(() => {});
+    slot.textLayer = container;
+    text.render().then(
+      () => {
+        if (this.slots.get(slot.box.index) === slot) registerTextLayer(container);
+      },
+      () => {},
+    );
   }
 
   private unmount(index: number): void {
@@ -188,6 +197,7 @@ export class PageRenderer {
     slot.baseJob?.task.cancel();
     slot.detailJob?.task.cancel();
     slot.text?.cancel();
+    if (slot.textLayer) unregisterTextLayer(slot.textLayer);
     freeCanvas(slot.base?.canvas);
     freeCanvas(slot.detail?.canvas);
     slot.el.remove();
