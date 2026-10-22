@@ -72,7 +72,14 @@ fn build_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
     let zoom_in = MenuItemBuilder::with_id("zoom-in", "Aumentar zoom").accelerator("CmdOrCtrl+=").build(app)?;
     let zoom_out = MenuItemBuilder::with_id("zoom-out", "Diminuir zoom").accelerator("CmdOrCtrl+-").build(app)?;
     let fit = MenuItemBuilder::with_id("fit-width", "Ajustar à largura").accelerator("CmdOrCtrl+0").build(app)?;
+    let dark = MenuItemBuilder::with_id("theme-toggle", "Alternar tema claro/escuro").accelerator("Alt+Shift+D").build(app)?;
+    let system = MenuItemBuilder::with_id("theme-system", "Usar aparência do sistema").build(app)?;
+    let dark_pages = MenuItemBuilder::with_id("dark-pages", "Escurecer páginas no tema escuro").build(app)?;
     let view = SubmenuBuilder::new(app, "Visualizar")
+        .item(&dark)
+        .item(&system)
+        .item(&dark_pages)
+        .separator()
         .item(&thumbnails)
         .separator()
         .item(&zoom_in)

@@ -35,18 +35,29 @@
   --duration-fast: 120ms;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --canvas-bg: #1b1b1d;
-    --surface: rgba(44, 44, 46, 0.86);
-    --surface-solid: #2c2c2e;
-    --surface-hover: rgba(255, 255, 255, 0.07);
-    --surface-active: rgba(255, 255, 255, 0.12);
-    --border: rgba(255, 255, 255, 0.1);
-    --text: #f5f5f7;
-    --text-muted: #98989d;
-    --accent: #3b8cff;
-    --page-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.6), 0 1px 4px rgba(0, 0, 0, 0.3);
-    --float-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.06), 0 4px 12px rgba(0, 0, 0, 0.3);
-  }
+/* Dark theme: set by the app (data-theme), following the system or the
+   user's choice. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --canvas-bg: #1b1b1d;
+  --surface: rgba(44, 44, 46, 0.86);
+  --surface-solid: #2c2c2e;
+  --surface-hover: rgba(255, 255, 255, 0.07);
+  --surface-active: rgba(255, 255, 255, 0.12);
+  --border: rgba(255, 255, 255, 0.1);
+  --text: #f5f5f7;
+  --text-muted: #98989d;
+  --accent: #3b8cff;
+  --page-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.6), 0 1px 4px rgba(0, 0, 0, 0.3);
+  --float-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.06), 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+/* Dark pages: the whole scene (pages + annotations) is inverted, as in
+   Excalidraw's dark mode. 93% keeps black from turning pure white. */
+:root {
+  --scene-filter: invert(93%) hue-rotate(180deg);
 }

@@ -72,6 +72,7 @@ Desenho e escrita seguem o Excalidraw:
 | Fechar PDF (volta para os recentes) | ⌘W |
 | Exportar PDF anotado | ⇧⌘E |
 | Miniaturas das páginas | ⌘B |
+| Alternar tema claro/escuro | ⌥⇧D |
 | Mão (pan) | H, ou segurar Espaço |
 | Seleção | V ou 1 |
 | Retângulo / Losango / Elipse | R ou 2 / D ou 3 / O ou 4 |
@@ -106,6 +107,17 @@ traço à mão, o texto manuscrito (fonte embutida) e o marca-texto (multiplicad
 o texto continua legível) saem iguais à tela. O PDF original não é alterado.
 O que estiver fora das páginas pode ir para uma página extra de "Rascunhos" no
 final (opção no diálogo).
+
+## Tema escuro
+
+Botão de aparência na barra inferior (e na tela inicial), ou menu Visualizar:
+
+- **Sistema / Claro / Escuro**: a escolha fica salva. A barra de título acompanha.
+- **Escurecer as páginas do PDF** (ligado por padrão no tema escuro): a página
+  e as anotações são invertidas juntas, como no Excalidraw. Texto preto vira
+  claro e a tinta preta vira branca, então tudo continua legível. Desligado, as
+  páginas ficam brancas sobre a interface escura.
+- O PDF exportado nunca é afetado pelo tema.
 
 ## Interface
 

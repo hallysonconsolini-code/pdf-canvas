@@ -1,5 +1,6 @@
 import type { RecentFile } from "../persistence/recents";
 import { FileIcon } from "./icons";
+import { ThemeMenu } from "./theme";
 
 interface Props {
   loading: boolean;
@@ -12,6 +13,9 @@ interface Props {
 export function StartScreen({ loading, recents, onOpen, onOpenRecent, onForget }: Props) {
   return (
     <main className="start">
+      <div className="start-corner">
+        <ThemeMenu placement="down" />
+      </div>
       <div className="start-card">
         <FileIcon />
         <h1>PDF Canvas</h1>

@@ -144,6 +144,26 @@ kbd {
   inset: 0;
 }
 
+/* Pages + annotation layers. Isolated so the highlighter's multiply blends
+   with the pages only. */
+.scene {
+  position: absolute;
+  inset: 0;
+  isolation: isolate;
+}
+
+/* Dark pages: invert the scene (and what mirrors it) like Excalidraw. */
+[data-dark-pages] .scene,
+[data-dark-pages] .thumb-image,
+[data-dark-pages] .note-editor {
+  filter: var(--scene-filter);
+}
+
+[data-dark-pages] .page {
+  /* Inverted, this becomes a faint light edge on the dark canvas. */
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.35);
+}
+
 /* Pages are placed in screen pixels by the renderer (no ancestor scale), so
    bitmaps map 1:1 to device pixels. */
 .page {
@@ -897,4 +917,65 @@ kbd {
 
 .btn-secondary:hover {
   background: var(--surface-active);
+}
+
+/* ---- Theme menu ---- */
+
+.theme-menu {
+  position: relative;
+}
+
+.theme-popover {
+  position: absolute;
+  right: 0;
+  width: 280px;
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  background: var(--surface-solid);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+  z-index: 20;
+}
+
+.theme-popover-up {
+  bottom: calc(100% + var(--space-2));
+}
+
+.theme-popover-down {
+  top: calc(100% + var(--space-2));
+}
+
+.theme-popover .segmented {
+  display: flex;
+}
+
+.theme-popover .segmented button {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  height: 28px;
+}
+
+.theme-popover .check {
+  margin: 0;
+  font-size: var(--font-size-sm);
+}
+
+.check.is-disabled {
+  color: var(--text-muted);
+}
+
+.start {
+  position: relative;
+}
+
+.start-corner {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
 }

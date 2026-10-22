@@ -71,6 +71,7 @@ export function Viewport(props: Props) {
   const { doc, store, tool, initialView, ref } = props;
   const rootRef = useRef<HTMLDivElement>(null);
   const pagesRef = useRef<HTMLDivElement>(null);
+  const sceneRef = useRef<HTMLDivElement>(null);
   const cameraRef = useRef<Camera | null>(null);
   const selection = useRef(new Selection()).current;
   // Latest props for long-lived event handlers.
@@ -180,7 +181,8 @@ export function Viewport(props: Props) {
     camera.bounds = { x: b.x - spare, y: b.y - spare / 2, w: b.w + spare * 2, h: b.h + spare };
 
     const pages = new PageRenderer(doc, camera, pagesLayer);
-    const annotations = new AnnotationRenderer(root, camera, store);
+    // Pages and annotations share one layer, so dark pages invert both together.
+    const annotations = new AnnotationRenderer(sceneRef.current!, camera, store);
     const editor = new NoteEditor(root, camera);
 
     // Selection box follows the selected items (and drops deleted ones).
@@ -299,7 +301,9 @@ export function Viewport(props: Props) {
 
   return (
     <div ref={rootRef} className={`viewport tool-${tool}`}>
-      <div ref={pagesRef} className="pages-layer" />
+      <div ref={sceneRef} className="scene">
+        <div ref={pagesRef} className="pages-layer" />
+      </div>
     </div>
   );
 }

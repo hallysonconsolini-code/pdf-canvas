@@ -5,6 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
     <title>PDF Canvas</title>
+    <script>
+      // Apply the saved theme before the first paint (no light flash).
+      try {
+        var t = JSON.parse(localStorage.getItem("pdf-canvas.theme") || "{}");
+        var dark = t.mode === "dark" || (t.mode !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.dataset.theme = dark ? "dark" : "light";
+        if (dark && t.darkPages !== false) document.documentElement.dataset.darkPages = "true";
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -115,7 +115,10 @@ export type MenuAction =
   | "thumbnails"
   | "zoom-in"
   | "zoom-out"
-  | "fit-width";
+  | "fit-width"
+  | "theme-toggle"
+  | "theme-system"
+  | "dark-pages";
 
 export function onMenu(handler: (action: MenuAction) => void): () => void {
   if (!isTauri) return () => {};

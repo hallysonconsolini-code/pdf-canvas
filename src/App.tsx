@@ -18,6 +18,7 @@ import {
 import { closeSession, openSession, type Session } from "./session";
 import { DocumentView, isTyping } from "./ui/DocumentView";
 import { StartScreen } from "./ui/StartScreen";
+import { useTheme } from "./ui/theme";
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -27,6 +28,9 @@ export default function App() {
   const [recents, setRecents] = useState<RecentFile[]>(loadRecents);
   const sessionRef = useRef<Session | null>(null);
   const busy = useRef(false);
+  const theme = useTheme();
+  const themeRef = useRef(theme);
+  themeRef.current = theme;
 
   const openPath = useCallback(async (path: string) => {
     if (busy.current) return;
@@ -93,6 +97,9 @@ export default function App() {
         closeCurrent();
         return;
       }
+      if (action === "theme-toggle") return themeRef.current.toggle();
+      if (action === "theme-system") return themeRef.current.setMode("system");
+      if (action === "dark-pages") return themeRef.current.setDarkPages(!themeRef.current.darkPages);
       // Document actions are handled by the open document's view.
       if (action === "export" || action === "thumbnails" || action === "zoom-in" || action === "zoom-out" || action === "fit-width") {
         window.dispatchEvent(new CustomEvent("pdf-canvas:menu", { detail: action }));
@@ -141,6 +148,11 @@ export default function App() {
   useEffect(() => {
     if (isTauri) return;
     const onKeyDown = (e: KeyboardEvent) => {
+      if (e.altKey && e.shiftKey && e.code === "KeyD") {
+        e.preventDefault();
+        runMenu("theme-toggle");
+        return;
+      }
       if (!e.metaKey && !e.ctrlKey) return;
       const key = e.key.toLowerCase();
       if (key === "o") runMenu("open");

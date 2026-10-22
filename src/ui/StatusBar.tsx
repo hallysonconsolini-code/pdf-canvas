@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { SaveState } from "../persistence/autosave";
 import { MinusIcon, PlusIcon } from "./icons";
+import { ThemeMenu } from "./theme";
 
 interface Props {
   page: number;
@@ -28,6 +29,8 @@ export function StatusBar({ page, pageCount, zoom, save, onGoToPage, onZoomBy, o
   return (
     <div className="statusbar">
       <SaveIndicator state={save} />
+      <ThemeMenu />
+      <span className="divider" />
       <label className="page-field">
         <span className="visually-hidden">Página</span>
         <input
